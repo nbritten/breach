@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/nbritten/breach/actions/workflows/test.yml"><img alt="CI" src="https://github.com/nbritten/breach/actions/workflows/test.yml/badge.svg" /></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg" /></a>
   <img alt="Platform: macOS" src="https://img.shields.io/badge/platform-macOS-black" />
 </p>
