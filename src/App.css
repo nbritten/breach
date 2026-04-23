@@ -1,0 +1,23 @@
+@import "tailwindcss";
+@import "@git-diff-view/react/styles/diff-view.css";
+
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  @apply bg-neutral-950 text-neutral-100 font-sans antialiased;
+}
+
+@keyframes whale-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.whale-float {
+  animation: whale-float 3.5s ease-in-out infinite;
+}

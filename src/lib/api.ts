@@ -1,0 +1,65 @@
+import { invoke } from "@tauri-apps/api/core";
+import type {
+  BranchDeleteResult,
+  CiStatus,
+  CloneResult,
+  CommitInfo,
+  DirtyFile,
+  MyPrs,
+  RepoSummary,
+  StaleBranch,
+  SyncResult,
+} from "../types";
+
+export const api = {
+  listRepos: (reposPath: string) =>
+    invoke<RepoSummary[]>("list_repos", { reposPath }),
+  repoSummary: (repoPath: string) =>
+    invoke<RepoSummary>("repo_summary", { repoPath }),
+  repoDiff: (repoPath: string) =>
+    invoke<string>("repo_diff", { repoPath }),
+  repoLog: (repoPath: string, limit?: number) =>
+    invoke<CommitInfo[]>("repo_log", { repoPath, limit }),
+  commitDiff: (repoPath: string, sha: string) =>
+    invoke<string>("commit_diff", { repoPath, sha }),
+  repoDirtyFiles: (repoPath: string) =>
+    invoke<DirtyFile[]>("repo_dirty_files", { repoPath }),
+  repoStash: (repoPath: string) =>
+    invoke<void>("repo_stash", { repoPath }),
+  repoDiscardAll: (repoPath: string) =>
+    invoke<void>("repo_discard_all", { repoPath }),
+  repoSyncToDefault: (repoPath: string, branch: string) =>
+    invoke<string>("repo_sync_to_default", { repoPath, branch }),
+  syncAll: (
+    reposPath: string,
+    branchOverrides: Record<string, string>,
+    defaultBranch: string,
+    onlyRepos: string[],
+  ) =>
+    invoke<SyncResult[]>("sync_all", {
+      reposPath,
+      branchOverrides,
+      defaultBranch,
+      onlyRepos,
+    }),
+  cloneMissing: (reposPath: string, orgs: string[], onlyRepos: string[]) =>
+    invoke<CloneResult[]>("clone_missing", { reposPath, orgs, onlyRepos }),
+  listMyPrs: (orgs: string[]) => invoke<MyPrs>("list_my_prs", { orgs }),
+  listCiStatus: (repos: { path: string; branch: string }[]) =>
+    invoke<Record<string, CiStatus>>("list_ci_status", { repos }),
+  listStaleBranches: (
+    reposPath: string,
+    branchOverrides: Record<string, string>,
+    defaultBranch: string,
+  ) =>
+    invoke<StaleBranch[]>("list_stale_branches", {
+      reposPath,
+      branchOverrides,
+      defaultBranch,
+    }),
+  deleteBranches: (branches: { repoPath: string; branch: string }[]) =>
+    invoke<BranchDeleteResult[]>("delete_branches", { branches }),
+  openInTerminal: (repoPath: string) =>
+    invoke<string>("open_in_terminal", { repoPath }),
+  defaultReposPath: () => invoke<string>("default_repos_path"),
+};
