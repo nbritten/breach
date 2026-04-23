@@ -27,6 +27,26 @@ pub fn expand(path: &str) -> PathBuf {
     expand_with_home(path, dirs::home_dir())
 }
 
+/// Scan a directory for immediate subdirectories that are git repositories.
+/// Sorted by path for deterministic ordering. Empty Vec if the directory doesn't exist.
+pub async fn scan_git_repos(root: &Path) -> Result<Vec<PathBuf>, String> {
+    let mut entries = fs::read_dir(root)
+        .await
+        .map_err(|e| format!("cannot read {}: {e}", root.display()))?;
+
+    let mut candidates = Vec::new();
+    while let Some(entry) = entries.next_entry().await.map_err(|e| e.to_string())? {
+        let path = entry.path();
+        if let Ok(meta) = fs::metadata(&path).await {
+            if meta.is_dir() && git::is_git_repo(&path).await {
+                candidates.push(path);
+            }
+        }
+    }
+    candidates.sort();
+    Ok(candidates)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,24 +106,4 @@ mod tests {
             PathBuf::from("~alice/thing")
         );
     }
-}
-
-/// Scan a directory for immediate subdirectories that are git repositories.
-/// Sorted by path for deterministic ordering. Empty Vec if the directory doesn't exist.
-pub async fn scan_git_repos(root: &Path) -> Result<Vec<PathBuf>, String> {
-    let mut entries = fs::read_dir(root)
-        .await
-        .map_err(|e| format!("cannot read {}: {e}", root.display()))?;
-
-    let mut candidates = Vec::new();
-    while let Some(entry) = entries.next_entry().await.map_err(|e| e.to_string())? {
-        let path = entry.path();
-        if let Ok(meta) = fs::metadata(&path).await {
-            if meta.is_dir() && git::is_git_repo(&path).await {
-                candidates.push(path);
-            }
-        }
-    }
-    candidates.sort();
-    Ok(candidates)
 }
