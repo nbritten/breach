@@ -35,21 +35,6 @@ export interface MyPrs {
   errors: Record<string, string>;
 }
 
-export interface StaleBranch {
-  repo_name: string;
-  repo_path: string;
-  branch: string;
-  default_branch: string;
-  last_commit_ts: number;
-}
-
-export interface BranchDeleteResult {
-  repo_path: string;
-  branch: string;
-  ok: boolean;
-  error: string | null;
-}
-
 export interface CloneResult {
   slug: string;
   name: string;
