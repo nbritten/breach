@@ -49,8 +49,6 @@ pub fn run() {
             commands::repos::default_repos_path,
             commands::sync::sync_all,
             commands::sync::repo_sync_to_default,
-            commands::prune::list_stale_branches,
-            commands::prune::delete_branches,
             commands::gh::clone_missing,
             commands::gh::list_my_prs,
             commands::gh::list_ci_status,

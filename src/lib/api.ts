@@ -1,13 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
-  BranchDeleteResult,
   CiStatus,
   CloneResult,
   CommitInfo,
   DirtyFile,
   MyPrs,
   RepoSummary,
-  StaleBranch,
   SyncResult,
 } from "../types";
 
@@ -47,18 +45,6 @@ export const api = {
   listMyPrs: (orgs: string[]) => invoke<MyPrs>("list_my_prs", { orgs }),
   listCiStatus: (repos: { path: string; branch: string }[]) =>
     invoke<Record<string, CiStatus>>("list_ci_status", { repos }),
-  listStaleBranches: (
-    reposPath: string,
-    branchOverrides: Record<string, string>,
-    defaultBranch: string,
-  ) =>
-    invoke<StaleBranch[]>("list_stale_branches", {
-      reposPath,
-      branchOverrides,
-      defaultBranch,
-    }),
-  deleteBranches: (branches: { repoPath: string; branch: string }[]) =>
-    invoke<BranchDeleteResult[]>("delete_branches", { branches }),
   openInTerminal: (repoPath: string) =>
     invoke<string>("open_in_terminal", { repoPath }),
   defaultReposPath: () => invoke<string>("default_repos_path"),

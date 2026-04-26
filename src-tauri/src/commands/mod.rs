@@ -1,5 +1,4 @@
 pub mod gh;
-pub mod prune;
 pub mod repos;
 pub mod shell;
 pub mod sync;

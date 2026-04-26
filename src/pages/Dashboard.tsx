@@ -16,7 +16,6 @@ import { errorText } from "../lib/errors";
 import { RepoCard } from "../components/RepoCard";
 import { SyncAllModal } from "../components/SyncAllModal";
 import { CloneMissingModal } from "../components/CloneMissingModal";
-import { StaleBranchesModal } from "../components/StaleBranchesModal";
 import { EmptyState } from "../components/EmptyState";
 import { Tooltip } from "../components/Tooltip";
 import type { CiStatus, MyPrs, PrInfo, RepoSummary } from "../types";
@@ -31,7 +30,6 @@ export function Dashboard() {
   const [reposPath, setPath] = useState<string>("");
   const [showSyncAll, setShowSyncAll] = useState(false);
   const [showClone, setShowClone] = useState(false);
-  const [showPrune, setShowPrune] = useState(false);
   const [pinnedOrder, setPinnedOrder] = useState<string[]>([]);
   const [prs, setPrs] = useState<MyPrs>({ authored: {}, review_requested: {}, errors: {} });
   const [ciByPath, setCiByPath] = useState<Record<string, CiStatus>>({});
@@ -169,15 +167,6 @@ export function Dashboard() {
               Clone missing
             </button>
           </Tooltip>
-          <Tooltip content="Finds local branches merged into origin/<default> (skipping the default and any branch checked out in a worktree). Select which to delete with git branch -D.">
-            <button
-              onClick={() => setShowPrune(true)}
-              disabled={loading || repos.length === 0}
-              className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50"
-            >
-              Prune
-            </button>
-          </Tooltip>
           <Tooltip
             content={
               pinnedOrder.length > 0
@@ -308,16 +297,6 @@ export function Dashboard() {
           reposPath={reposPath}
           onClose={() => {
             setShowClone(false);
-            refresh();
-          }}
-        />
-      )}
-
-      {showPrune && (
-        <StaleBranchesModal
-          reposPath={reposPath}
-          onClose={() => {
-            setShowPrune(false);
             refresh();
           }}
         />
