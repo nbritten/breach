@@ -52,6 +52,7 @@ pub fn run() {
             commands::gh::clone_missing,
             commands::gh::list_my_prs,
             commands::gh::list_ci_status,
+            commands::notifications::pr_notifications_changed,
             commands::shell::open_in_terminal,
         ])
         .run(tauri::generate_context!())

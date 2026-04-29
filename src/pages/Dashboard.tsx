@@ -12,6 +12,7 @@ import {
 import { useSearch } from "../lib/search";
 import { useToast } from "../lib/toast";
 import { errorText } from "../lib/errors";
+import { usePrNotificationsPoll } from "../lib/hooks";
 
 import { RepoCard } from "../components/RepoCard";
 import { SyncAllModal } from "../components/SyncAllModal";
@@ -31,6 +32,7 @@ export function Dashboard() {
   const [showSyncAll, setShowSyncAll] = useState(false);
   const [showClone, setShowClone] = useState(false);
   const [pinnedOrder, setPinnedOrder] = useState<string[]>([]);
+  const [orgs, setOrgs] = useState<string[]>([]);
   const [prs, setPrs] = useState<MyPrs>({ authored: {}, review_requested: {}, errors: {} });
   const [ciByPath, setCiByPath] = useState<Record<string, CiStatus>>({});
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -49,13 +51,27 @@ export function Dashboard() {
     [pinnedOrder],
   );
 
+  const refreshPrs = useCallback((forOrgs: string[]) => {
+    if (forOrgs.length === 0) {
+      setPrs({ authored: {}, review_requested: {}, errors: {} });
+      return;
+    }
+    api
+      .listMyPrs(forOrgs)
+      .then(setPrs)
+      .catch((err) => {
+        console.warn("PR fetch failed", err);
+        setPrs({ authored: {}, review_requested: {}, errors: {} });
+      });
+  }, []);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const path = await getReposPath();
       setPath(path);
-      const [list, pinned, orgs, tpl, services] = await Promise.all([
+      const [list, pinned, nextOrgs, tpl, services] = await Promise.all([
         api.listRepos(path),
         getPinnedRepos(),
         getRepoOrgs(),
@@ -64,19 +80,10 @@ export function Dashboard() {
       ]);
       setRepos(list);
       setPinnedOrder(pinned);
+      setOrgs(nextOrgs);
       setServiceTpl(tpl);
       setServiceSet(new Set(services));
-      if (orgs.length > 0) {
-        api
-          .listMyPrs(orgs)
-          .then(setPrs)
-          .catch((err) => {
-            console.warn("PR fetch failed", err);
-            setPrs({ authored: {}, review_requested: {}, errors: {} });
-          });
-      } else {
-        setPrs({ authored: {}, review_requested: {}, errors: {} });
-      }
+      refreshPrs(nextOrgs);
       const ciReqs = list
         .filter((r) => r.branch)
         .map((r) => ({ path: r.path, branch: r.branch as string }));
@@ -96,7 +103,9 @@ export function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshPrs]);
+
+  usePrNotificationsPoll(orgs.length > 0, 30_000, () => refreshPrs(orgs));
 
   const refreshOne = useCallback(async (path: string) => {
     const updated = await api.repoSummary(path);

@@ -5,6 +5,7 @@ import type {
   CommitInfo,
   DirtyFile,
   MyPrs,
+  NotificationPoll,
   RepoSummary,
   SyncResult,
 } from "../types";
@@ -43,6 +44,8 @@ export const api = {
   cloneMissing: (reposPath: string, orgs: string[], onlyRepos: string[]) =>
     invoke<CloneResult[]>("clone_missing", { reposPath, orgs, onlyRepos }),
   listMyPrs: (orgs: string[]) => invoke<MyPrs>("list_my_prs", { orgs }),
+  pollPrNotifications: (lastModified: string | null) =>
+    invoke<NotificationPoll>("pr_notifications_changed", { lastModified }),
   listCiStatus: (repos: { path: string; branch: string }[]) =>
     invoke<Record<string, CiStatus>>("list_ci_status", { repos }),
   openInTerminal: (repoPath: string) =>
