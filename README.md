@@ -21,7 +21,7 @@
 - **Multi-repo scan.** Point Breach at a directory; it reads every git repo inside and shows branch, dirty state, ahead/behind counts, and last commit at a glance.
 - **PR badges.** Pulls your open PRs via `gh search prs` and badges them per repo.
 - **CI dots.** Quick green/yellow/red status for the latest `gh run list` per branch.
-- **Bulk actions.** Sync pinned repos, clone missing ones, prune merged branches — each one behind a confirmation modal.
+- **Bulk actions.** Sync pinned repos, clone missing ones and more with each one behind a confirmation modal.
 
 ## When Breach is (and isn't) the right tool
 
