@@ -41,21 +41,22 @@ pub async fn pr_notifications_changed(
 }
 
 fn parse_response(raw: &str, prev_lm: Option<&str>) -> Result<NotificationPoll, String> {
-    // curl -i may emit multiple header blocks (interim 1xx, redirects) before the
-    // final response. Each block ends in a blank line; the body follows the last
-    // header block. Split on blank lines and take the second-to-last segment.
-    let normalized = raw.replace("\r\n", "\n");
-    let parts: Vec<&str> = normalized.split("\n\n").collect();
-    if parts.len() < 2 {
-        return Err("no header/body separator in response".into());
-    }
-    let header_block = parts[parts.len() - 2];
-
+    // Walk the response line-by-line and stop at the blank line that ends the final
+    // header block, so body content (which could in principle contain `\n\n` or lines
+    // starting with `HTTP/`) is never parsed as headers. Interim 1xx blocks are
+    // followed through to the next response.
     let mut status: Option<u16> = None;
     let mut new_lm: Option<String> = None;
-    for line in header_block.lines() {
+
+    for line in raw.lines() {
         if line.starts_with("HTTP/") {
             status = line.split_whitespace().nth(1).and_then(|s| s.parse().ok());
+            new_lm = None;
+        } else if line.is_empty() {
+            match status {
+                Some(code) if (100..200).contains(&code) => continue,
+                _ => break,
+            }
         } else if let Some((k, v)) = line.split_once(':') {
             if k.trim().eq_ignore_ascii_case("last-modified") {
                 new_lm = Some(v.trim().to_string());
@@ -121,5 +122,23 @@ mod tests {
     #[test]
     fn parse_missing_status_is_error() {
         assert!(parse_response("", None).is_err());
+    }
+
+    #[test]
+    fn parse_ignores_http_lookalikes_in_body() {
+        // If GitHub ever pretty-prints a notification body, the body could contain
+        // blank lines and even lines starting with `HTTP/`. The parser must stop at
+        // the first body byte and never mistake those for a new response.
+        let raw = "HTTP/2 200\r\n\
+            last-modified: real\r\n\
+            \r\n\
+            {\r\n\
+            \r\n\
+            HTTP/1.1 999 fake\r\n\
+            last-modified: fake\r\n\
+            }";
+        let res = parse_response(raw, None).unwrap();
+        assert!(res.changed);
+        assert_eq!(res.last_modified.as_deref(), Some("real"));
     }
 }

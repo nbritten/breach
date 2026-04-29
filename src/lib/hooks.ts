@@ -60,6 +60,10 @@ export function usePrNotificationsPoll(
     };
 
     const id = window.setInterval(tick, intervalMs);
+    // Bootstrap immediately rather than waiting a full interval, so the window
+    // where notifications can land between the caller's initial PR fetch and our
+    // baseline is milliseconds rather than `intervalMs`.
+    tick();
     const onVisibility = () => {
       if (document.visibilityState === "visible") tick();
     };
