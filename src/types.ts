@@ -43,6 +43,11 @@ export interface CloneResult {
   error: string | null;
 }
 
+export interface NotificationPoll {
+  changed: boolean;
+  last_modified: string | null;
+}
+
 export interface DirtyFile {
   path: string;
   index_status: string;
