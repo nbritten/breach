@@ -51,4 +51,5 @@ export const api = {
   openInTerminal: (repoPath: string) =>
     invoke<string>("open_in_terminal", { repoPath }),
   defaultReposPath: () => invoke<string>("default_repos_path"),
+  homeRelative: (path: string) => invoke<string>("home_relative", { path }),
 };

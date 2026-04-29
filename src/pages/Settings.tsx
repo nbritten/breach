@@ -22,6 +22,13 @@ import {
 import { SettingsSection } from "../components/settings/SettingsSection";
 import { RemoveButton } from "../components/settings/RemoveButton";
 import { useToast } from "../lib/toast";
+import {
+  applyImport,
+  buildExport,
+  downloadExport,
+  parseImport,
+  pickJsonFile,
+} from "../lib/settingsIo";
 
 type Row = { id: number; name: string; branch: string };
 type OrgRow = { id: number; org: string };
@@ -46,6 +53,7 @@ export function Settings() {
   const [serviceTpl, setServiceTpl] = useState("");
   const [services, setServices] = useState<ServiceRow[]>([]);
   const [saved, setSaved] = useState(false);
+  const [imported, setImported] = useState(false);
   const { show: showOnboarding } = useOnboarding();
   const { showError } = useToast();
 
@@ -127,6 +135,50 @@ export function Settings() {
   const removePinRow = (id: number) =>
     setPins((ps) => ps.filter((p) => p.id !== id));
   const addPinRow = () => setPins((ps) => [...ps, newPinRow()]);
+
+  const onExport = async () => {
+    try {
+      // Save first so the export reflects whatever the user has typed but not yet saved.
+      await save();
+      const payload = await buildExport();
+      downloadExport(payload);
+    } catch (e) {
+      showError(e);
+    }
+  };
+
+  const onImport = async () => {
+    try {
+      const file = await pickJsonFile();
+      if (!file) return;
+      const text = await file.text();
+      const payload = parseImport(text);
+      await applyImport(payload);
+      // Reload visible state from store so the form reflects what was just imported.
+      const [p, f, overrides, orgList, pinList, tpl, serviceList] =
+        await Promise.all([
+          getReposPath(),
+          getDefaultBranch(),
+          getBranchOverrides(),
+          getRepoOrgs(),
+          getPinnedRepos(),
+          getServiceUrlTemplate(),
+          getServiceRepos(),
+        ]);
+      setPath(p);
+      setFallback(f);
+      const entries = Object.entries(overrides);
+      setRows(entries.length ? entries.map(([n, b]) => newRow(n, b)) : []);
+      setOrgs(orgList.map((o) => newOrgRow(o)));
+      setPins(pinList.map((n) => newPinRow(n)));
+      setServiceTpl(tpl);
+      setServices(serviceList.map((n) => newServiceRow(n)));
+      setImported(true);
+      setTimeout(() => setImported(false), 1500);
+    } catch (e) {
+      showError(e);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full relative">
@@ -301,9 +353,22 @@ export function Settings() {
             Save
           </button>
           {saved && <span className="text-xs text-emerald-400">Saved</span>}
+          {imported && <span className="text-xs text-emerald-400">Imported</span>}
+          <button
+            onClick={onExport}
+            className="ml-auto px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm"
+          >
+            Export
+          </button>
+          <button
+            onClick={onImport}
+            className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm"
+          >
+            Import
+          </button>
           <button
             onClick={showOnboarding}
-            className="ml-auto text-xs text-neutral-500 hover:text-neutral-300 underline underline-offset-2"
+            className="text-xs text-neutral-500 hover:text-neutral-300 underline underline-offset-2"
           >
             Re-open welcome wizard
           </button>

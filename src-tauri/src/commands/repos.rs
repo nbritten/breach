@@ -69,3 +69,18 @@ pub fn default_repos_path() -> String {
         .map(|h| h.join("repos").to_string_lossy().to_string())
         .unwrap_or_else(|| "~/repos".to_string())
 }
+
+/// Inverse of `expand`: replace the leading home directory with `~` so an exported
+/// settings file is portable to another machine where `$HOME` differs.
+#[tauri::command]
+pub fn home_relative(path: String) -> String {
+    let Some(home) = dirs::home_dir() else { return path };
+    let Some(home_str) = home.to_str() else { return path };
+    if path == home_str {
+        return "~".to_string();
+    }
+    if let Some(rest) = path.strip_prefix(&format!("{home_str}/")) {
+        return format!("~/{rest}");
+    }
+    path
+}
