@@ -1,5 +1,6 @@
 import { api } from "./api";
 import {
+  FALLBACK_DEFAULT_BRANCH,
   getBranchOverrides,
   getDefaultBranch,
   getPinnedRepos,
@@ -31,6 +32,8 @@ export interface SettingsExport {
   };
 }
 
+// `onboarded` is intentionally excluded from the export payload: importing on a
+// fresh machine should not skip the welcome wizard.
 export async function buildExport(): Promise<SettingsExport> {
   const [
     reposPath,
@@ -85,7 +88,13 @@ export function pickJsonFile(): Promise<File | null> {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "application/json,.json";
-    input.onchange = () => resolve(input.files?.[0] ?? null);
+    input.addEventListener("change", () =>
+      resolve(input.files?.[0] ?? null),
+    );
+    // `cancel` (recent Chromium / WebKit) fires when the user dismisses the picker;
+    // without it, the promise would hang forever on cancellation. Browsers without
+    // support degrade to the original behavior, which is a benign dead promise.
+    input.addEventListener("cancel", () => resolve(null));
     input.click();
   });
 }
@@ -121,7 +130,7 @@ export function parseImport(text: string): SettingsExport {
 }
 
 export async function applyImport(payload: SettingsExport): Promise<void> {
-  const s = payload.settings;
+  const s = normalizeSettings(payload.settings);
   await Promise.all([
     setReposPath(s.reposPath),
     setDefaultBranch(s.defaultBranch),
@@ -131,6 +140,29 @@ export async function applyImport(payload: SettingsExport): Promise<void> {
     setServiceUrlTemplate(s.serviceUrlTemplate),
     setServiceRepos(s.serviceRepos),
   ]);
+}
+
+// Mirrors the trim/filter pass that the Settings form does on save, so an
+// imported file can't end up persisted with the form looking one way and a
+// later save normalizing the same fields differently.
+function normalizeSettings(
+  s: SettingsExport["settings"],
+): SettingsExport["settings"] {
+  const cleanedOverrides: Record<string, string> = {};
+  for (const [k, v] of Object.entries(s.branchOverrides)) {
+    const name = k.trim();
+    const branch = v.trim();
+    if (name && branch) cleanedOverrides[name] = branch;
+  }
+  return {
+    reposPath: s.reposPath.trim(),
+    defaultBranch: s.defaultBranch.trim() || FALLBACK_DEFAULT_BRANCH,
+    branchOverrides: cleanedOverrides,
+    repoOrgs: s.repoOrgs.map((x) => x.trim()).filter((x) => x.length > 0),
+    pinnedRepos: s.pinnedRepos.map((x) => x.trim()).filter((x) => x.length > 0),
+    serviceUrlTemplate: s.serviceUrlTemplate.trim(),
+    serviceRepos: s.serviceRepos.map((x) => x.trim()).filter((x) => x.length > 0),
+  };
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {

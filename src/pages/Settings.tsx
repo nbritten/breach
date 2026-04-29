@@ -84,7 +84,7 @@ export function Settings() {
     })();
   }, [showError]);
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     const map: Record<string, string> = {};
     for (const r of rows) {
       const name = r.name.trim();
@@ -108,8 +108,10 @@ export function Settings() {
       ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
+      return true;
     } catch (e) {
       showError(e);
+      return false;
     }
   };
 
@@ -138,8 +140,10 @@ export function Settings() {
 
   const onExport = async () => {
     try {
-      // Save first so the export reflects whatever the user has typed but not yet saved.
-      await save();
+      // Save first so the export reflects whatever the user has typed but not yet
+      // saved — and bail if that save failed, otherwise we'd silently export the
+      // previously-persisted values while the user already saw an error toast.
+      if (!(await save())) return;
       const payload = await buildExport();
       downloadExport(payload);
     } catch (e) {
