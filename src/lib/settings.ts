@@ -1,6 +1,9 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { api } from "./api";
 
+// Adding a new setting key? Also update src/lib/settingsIo.ts
+// (SettingsExport, buildExport, parseImport, applyImport) so it round-trips
+// through the Export / Import flow.
 const store = new LazyStore("settings.json");
 
 const REPOS_PATH_KEY = "reposPath";

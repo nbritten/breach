@@ -69,3 +69,78 @@ pub fn default_repos_path() -> String {
         .map(|h| h.join("repos").to_string_lossy().to_string())
         .unwrap_or_else(|| "~/repos".to_string())
 }
+
+/// Inverse of `expand`: replace the leading home directory with `~` so an exported
+/// settings file is portable to another machine where `$HOME` differs.
+#[tauri::command]
+pub fn home_relative(path: String) -> String {
+    home_relative_with_home(&path, dirs::home_dir())
+}
+
+pub(crate) fn home_relative_with_home(path: &str, home: Option<PathBuf>) -> String {
+    let Some(home) = home else { return path.to_string() };
+    let Some(home_str) = home.to_str() else { return path.to_string() };
+    if path == home_str {
+        return "~".to_string();
+    }
+    if let Some(rest) = path.strip_prefix(&format!("{home_str}/")) {
+        return format!("~/{rest}");
+    }
+    path.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn home() -> PathBuf {
+        PathBuf::from("/Users/tester")
+    }
+
+    #[test]
+    fn home_relative_bare_home() {
+        assert_eq!(home_relative_with_home("/Users/tester", Some(home())), "~");
+    }
+
+    #[test]
+    fn home_relative_with_subpath() {
+        assert_eq!(
+            home_relative_with_home("/Users/tester/repos", Some(home())),
+            "~/repos",
+        );
+    }
+
+    #[test]
+    fn home_relative_nested_subpath() {
+        assert_eq!(
+            home_relative_with_home("/Users/tester/Code/breach", Some(home())),
+            "~/Code/breach",
+        );
+    }
+
+    #[test]
+    fn home_relative_unrelated_path_unchanged() {
+        assert_eq!(
+            home_relative_with_home("/etc/hosts", Some(home())),
+            "/etc/hosts",
+        );
+    }
+
+    #[test]
+    fn home_relative_without_home_unchanged() {
+        assert_eq!(
+            home_relative_with_home("/Users/tester/repos", None),
+            "/Users/tester/repos",
+        );
+    }
+
+    #[test]
+    fn home_relative_sibling_user_path_unchanged() {
+        // /Users/testers must NOT match the /Users/tester home — only an exact
+        // match or a `$HOME/` prefix should reduce.
+        assert_eq!(
+            home_relative_with_home("/Users/testers/x", Some(home())),
+            "/Users/testers/x",
+        );
+    }
+}
