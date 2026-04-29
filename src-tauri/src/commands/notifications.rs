@@ -7,22 +7,6 @@ pub struct NotificationPoll {
     pub last_modified: Option<String>,
 }
 
-async fn gh_token() -> Result<String, String> {
-    let out = Command::new("gh")
-        .args(["auth", "token"])
-        .output()
-        .await
-        .map_err(|e| format!("gh spawn failed: {e}"))?;
-    if !out.status.success() {
-        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
-    }
-    let token = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if token.is_empty() {
-        return Err("gh auth token returned empty token".into());
-    }
-    Ok(token)
-}
-
 /// Poll GitHub's notifications endpoint with a conditional GET. A 304 means nothing
 /// has changed since `last_modified` and costs no rate-limit budget; a 200 means the
 /// stream changed and the caller should re-fetch the PR list.
@@ -30,33 +14,25 @@ async fn gh_token() -> Result<String, String> {
 /// `participating=true` scopes notifications to ones the user is directly involved in
 /// (review requests, mentions, threads they posted in) — a noisy global feed would
 /// trigger needless re-fetches.
+///
+/// Uses `gh api --include` rather than a raw HTTP client so authentication is handled
+/// by gh's keyring-backed credential store and the token never appears in process args.
 #[tauri::command]
 pub async fn pr_notifications_changed(
     last_modified: Option<String>,
 ) -> Result<NotificationPoll, String> {
-    let token = gh_token().await?;
-
-    let mut args: Vec<String> = vec![
-        "-sS".into(),
-        "-i".into(),
-        "--max-redirs".into(),
-        "0".into(),
-        "-H".into(),
-        format!("Authorization: token {token}"),
-        "-H".into(),
-        "Accept: application/vnd.github+json".into(),
-    ];
+    let mut args: Vec<String> = vec!["api".into(), "--include".into()];
     if let Some(ref lm) = last_modified {
         args.push("-H".into());
         args.push(format!("If-Modified-Since: {lm}"));
     }
-    args.push("https://api.github.com/notifications?participating=true&all=false".into());
+    args.push("/notifications?participating=true&all=false".into());
 
-    let out = Command::new("curl")
+    let out = Command::new("gh")
         .args(&args)
         .output()
         .await
-        .map_err(|e| format!("curl spawn failed: {e}"))?;
+        .map_err(|e| format!("gh spawn failed: {e}"))?;
     if !out.status.success() {
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
     }
