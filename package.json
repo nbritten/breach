@@ -2,6 +2,9 @@
   "name": "breach",
   "private": true,
   "version": "0.2.0",
+  "description": "A macOS dashboard for every local git repo.",
+  "author": "natbritten",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
