@@ -328,8 +328,8 @@ export function Settings() {
           description={
             <>
               Clone missing previews every non-archived repo in these accounts (orgs or
-              users) so you can pick what to clone. PR badges and CI dots also query
-              against this list. Requires <code>gh</code> CLI authed.
+              users) so you can pick what to clone. PR badges also query against this
+              list. Requires <code>gh</code> CLI authed.
             </>
           }
           onAdd={addOrgRow}
