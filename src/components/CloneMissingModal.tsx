@@ -135,7 +135,7 @@ export function CloneMissingModal({ reposPath, onClose }: Props) {
             disabled={selected.size === 0}
             className="px-3 py-1.5 rounded bg-emerald-600/80 hover:bg-emerald-600 text-sm disabled:opacity-40 disabled:hover:bg-emerald-600/80"
           >
-            Clone {selected.size || ""}
+            {selected.size > 0 ? `Clone ${selected.size}` : "Clone"}
           </button>
         </div>
       </div>
