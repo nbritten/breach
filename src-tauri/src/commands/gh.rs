@@ -314,6 +314,9 @@ async fn list_org_repos(org: &str) -> Result<Vec<String>, String> {
 /// List `org/name` slugs in the given orgs that aren't already cloned under
 /// `repos_path`. Sorted alphabetically. The frontend uses this to populate the
 /// Clone-missing picker before the user chooses which to clone.
+///
+/// If `repos_path` doesn't exist yet, every repo in the org is "missing" — the
+/// directory is created lazily by `clone_repos` once the user picks something.
 #[tauri::command]
 pub async fn list_missing_repos(
     repos_path: String,
