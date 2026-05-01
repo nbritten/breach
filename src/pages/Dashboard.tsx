@@ -167,7 +167,7 @@ export function Dashboard() {
               Terminal
             </button>
           </Tooltip>
-          <Tooltip content="Lists repos in your configured GitHub orgs via gh and clones any pinned ones that aren't local yet. Without pins, clones every non-archived repo.">
+          <Tooltip content="Lists every non-archived repo in your configured GitHub orgs that isn't local yet, then lets you pick which ones to clone.">
             <button
               onClick={() => setShowClone(true)}
               disabled={loading}

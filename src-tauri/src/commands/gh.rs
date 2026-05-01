@@ -311,14 +311,45 @@ async fn list_org_repos(org: &str) -> Result<Vec<String>, String> {
         .collect())
 }
 
-/// Clone any repos in the given orgs that aren't already present locally. When
-/// `only_repos` is non-empty, restricts to repos whose name is in the set (used to clone
-/// "only my pinned repos"). Skips archived repos.
+/// List `org/name` slugs in the given orgs that aren't already cloned under
+/// `repos_path`. Sorted alphabetically. The frontend uses this to populate the
+/// Clone-missing picker before the user chooses which to clone.
+///
+/// If `repos_path` doesn't exist yet, every repo in the org is "missing" — the
+/// directory is created lazily by `clone_repos` once the user picks something.
 #[tauri::command]
-pub async fn clone_missing(
+pub async fn list_missing_repos(
     repos_path: String,
     orgs: Vec<String>,
-    only_repos: Vec<String>,
+) -> Result<Vec<String>, String> {
+    if !gh_available().await {
+        return Err("gh CLI not found. Install with: brew install gh && gh auth login".into());
+    }
+    let root = expand(&repos_path);
+
+    let mut slugs: Vec<String> = Vec::new();
+    for org in orgs.iter().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        let names = list_org_repos(org)
+            .await
+            .map_err(|e| format!("listing org {org}: {e}"))?;
+        for n in names {
+            if !root.join(&n).exists() {
+                slugs.push(format!("{org}/{n}"));
+            }
+        }
+    }
+    slugs.sort();
+    slugs.dedup();
+    Ok(slugs)
+}
+
+/// Clone the given `org/name` slugs into `repos_path` in parallel. The caller is
+/// responsible for picking the slugs (typically from `list_missing_repos`); this
+/// command does no filtering of its own.
+#[tauri::command]
+pub async fn clone_repos(
+    repos_path: String,
+    slugs: Vec<String>,
 ) -> Result<Vec<CloneResult>, String> {
     if !gh_available().await {
         return Err("gh CLI not found. Install with: brew install gh && gh auth login".into());
@@ -328,23 +359,11 @@ pub async fn clone_missing(
         .await
         .map_err(|e| format!("cannot create {}: {e}", root.display()))?;
 
-    let filter: std::collections::HashSet<String> = only_repos.into_iter().collect();
-    let restrict = !filter.is_empty();
-
-    let mut slugs: Vec<String> = Vec::new();
-    for org in orgs.iter().map(|s| s.trim()).filter(|s| !s.is_empty()) {
-        let names = list_org_repos(org)
-            .await
-            .map_err(|e| format!("listing org {org}: {e}"))?;
-        for n in names {
-            if restrict && !filter.contains(&n) {
-                continue;
-            }
-            slugs.push(format!("{org}/{n}"));
-        }
+    // Reject bare names early: rsplit would otherwise produce name == slug, and
+    // `gh repo clone <bare>` would fail with a less obvious error per-repo.
+    if let Some(bad) = slugs.iter().find(|s| !s.contains('/')) {
+        return Err(format!("invalid slug {bad:?}: expected `org/name`"));
     }
-    slugs.sort();
-    slugs.dedup();
 
     let entries: Vec<(String, String, PathBuf)> = slugs
         .into_iter()
