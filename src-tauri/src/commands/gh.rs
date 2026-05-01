@@ -22,6 +22,9 @@ pub(crate) async fn gh_available() -> bool {
 /// the accounts list so the zero-config flow shows your own repos.
 #[tauri::command]
 pub async fn gh_login() -> Result<String, String> {
+    if !gh_available().await {
+        return Err("gh CLI not found. Install with: brew install gh && gh auth login".into());
+    }
     let output = Command::new("gh")
         .args(["api", "/user", "--jq", ".login"])
         .output()
