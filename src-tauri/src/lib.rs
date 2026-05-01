@@ -52,6 +52,7 @@ pub fn run() {
             commands::sync::repo_sync_to_default,
             commands::gh::list_missing_repos,
             commands::gh::clone_repos,
+            commands::gh::gh_login,
             commands::gh::list_my_prs,
             commands::gh::list_ci_status,
             commands::notifications::pr_notifications_changed,

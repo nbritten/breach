@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import logo from "../assets/logo.png";
 import {
   FALLBACK_DEFAULT_BRANCH,
@@ -7,6 +7,7 @@ import {
   setReposPath,
 } from "../lib/settings";
 import { useOnboarding } from "../lib/onboarding";
+import { api } from "../lib/api";
 
 type Step = 0 | 1 | 2 | 3;
 
@@ -26,7 +27,27 @@ export function Onboarding({
   const [path, setPath] = useState(initialReposPath || "~/repos");
   const [orgInput, setOrgInput] = useState("");
   const [orgs, setOrgs] = useState<string[]>([]);
+  const [autoAddedLogin, setAutoAddedLogin] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // When the user reaches the accounts step with no entries yet, pre-seed the list
+  // with their own GitHub login so the zero-config flow shows their personal repos.
+  // Failures are silent — the rest of the onboarding still works.
+  useEffect(() => {
+    if (step !== 2 || orgs.length > 0 || autoAddedLogin !== null) return;
+    let cancelled = false;
+    api
+      .ghLogin()
+      .then((login) => {
+        if (cancelled || !login) return;
+        setOrgs([login]);
+        setAutoAddedLogin(login);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [step, orgs.length, autoAddedLogin]);
 
   const addOrg = () => {
     const v = orgInput.trim();
@@ -154,6 +175,12 @@ export function Onboarding({
                     </span>
                   ))}
                 </div>
+              )}
+              {autoAddedLogin && orgs.includes(autoAddedLogin) && (
+                <p className="text-xs text-neutral-500">
+                  Added your GitHub account from <code>gh</code>. Remove it if you'd
+                  rather not include your personal repos.
+                </p>
               )}
               <p className="text-xs text-neutral-500">
                 Requires <code>gh</code> CLI authed. If you don't have it:{" "}
