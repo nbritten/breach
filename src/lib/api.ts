@@ -41,8 +41,10 @@ export const api = {
       defaultBranch,
       onlyRepos,
     }),
-  cloneMissing: (reposPath: string, orgs: string[], onlyRepos: string[]) =>
-    invoke<CloneResult[]>("clone_missing", { reposPath, orgs, onlyRepos }),
+  listMissingRepos: (reposPath: string, orgs: string[]) =>
+    invoke<string[]>("list_missing_repos", { reposPath, orgs }),
+  cloneRepos: (reposPath: string, slugs: string[]) =>
+    invoke<CloneResult[]>("clone_repos", { reposPath, slugs }),
   listMyPrs: (orgs: string[]) => invoke<MyPrs>("list_my_prs", { orgs }),
   pollPrNotifications: (lastModified: string | null) =>
     invoke<NotificationPoll>("pr_notifications_changed", { lastModified }),
