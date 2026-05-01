@@ -18,6 +18,28 @@ pub(crate) async fn gh_available() -> bool {
         .unwrap_or(false)
 }
 
+/// The login of the gh-authed user (e.g. `nbritten`). Used by onboarding to pre-seed
+/// the accounts list so the zero-config flow shows your own repos.
+#[tauri::command]
+pub async fn gh_login() -> Result<String, String> {
+    if !gh_available().await {
+        return Err("gh CLI not found. Install with: brew install gh && gh auth login".into());
+    }
+    let output = Command::new("gh")
+        .args(["api", "/user", "--jq", ".login"])
+        .output()
+        .await
+        .map_err(|e| format!("gh spawn failed: {e}"))?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    let login = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if login.is_empty() {
+        return Err("gh api /user returned empty login".into());
+    }
+    Ok(login)
+}
+
 // ---------- CI status ----------
 
 #[derive(Deserialize)]

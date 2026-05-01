@@ -167,7 +167,7 @@ export function Dashboard() {
               Terminal
             </button>
           </Tooltip>
-          <Tooltip content="Lists every non-archived repo in your configured GitHub orgs that isn't local yet, then lets you pick which ones to clone.">
+          <Tooltip content="Lists every non-archived repo in your configured GitHub accounts (orgs or users) that isn't local yet, then lets you pick which ones to clone.">
             <button
               onClick={() => setShowClone(true)}
               disabled={loading}
@@ -214,8 +214,8 @@ export function Dashboard() {
             title="No repositories yet"
             subtitle={
               <>
-                Nothing in <code className="font-mono">{reposPath}</code>. Configure an org in
-                Settings and hit Clone missing to get started.
+                Nothing in <code className="font-mono">{reposPath}</code>. Add a GitHub
+                account in Settings and hit Clone missing to get started.
               </>
             }
           />

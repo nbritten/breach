@@ -46,6 +46,7 @@ export const api = {
   cloneRepos: (reposPath: string, slugs: string[]) =>
     invoke<CloneResult[]>("clone_repos", { reposPath, slugs }),
   listMyPrs: (orgs: string[]) => invoke<MyPrs>("list_my_prs", { orgs }),
+  ghLogin: () => invoke<string>("gh_login"),
   pollPrNotifications: (lastModified: string | null) =>
     invoke<NotificationPoll>("pr_notifications_changed", { lastModified }),
   listCiStatus: (repos: { path: string; branch: string }[]) =>

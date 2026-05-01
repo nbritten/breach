@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import logo from "../assets/logo.png";
 import {
   FALLBACK_DEFAULT_BRANCH,
@@ -7,6 +7,7 @@ import {
   setReposPath,
 } from "../lib/settings";
 import { useOnboarding } from "../lib/onboarding";
+import { api } from "../lib/api";
 
 type Step = 0 | 1 | 2 | 3;
 
@@ -26,7 +27,27 @@ export function Onboarding({
   const [path, setPath] = useState(initialReposPath || "~/repos");
   const [orgInput, setOrgInput] = useState("");
   const [orgs, setOrgs] = useState<string[]>([]);
+  const [autoAddedLogin, setAutoAddedLogin] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // When the user reaches the accounts step with no entries yet, pre-seed the list
+  // with their own GitHub login so the zero-config flow shows their personal repos.
+  // Failures are silent — the rest of the onboarding still works.
+  useEffect(() => {
+    if (step !== 2 || orgs.length > 0 || autoAddedLogin !== null) return;
+    let cancelled = false;
+    api
+      .ghLogin()
+      .then((login) => {
+        if (cancelled || !login) return;
+        setOrgs([login]);
+        setAutoAddedLogin(login);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [step, orgs.length, autoAddedLogin]);
 
   const addOrg = () => {
     const v = orgInput.trim();
@@ -110,10 +131,10 @@ export function Onboarding({
 
           {step === 2 && (
             <div className="flex-1 flex flex-col gap-4">
-              <h2 className="text-lg font-semibold">Add your GitHub orgs</h2>
+              <h2 className="text-lg font-semibold">Add your GitHub accounts</h2>
               <p className="text-sm text-neutral-400">
-                Clone missing uses these to discover your team's repos via{" "}
-                <code>gh</code>. Optional — you can skip and add later.
+                Clone missing previews repos under each of these accounts (orgs or
+                users) via <code>gh</code>. Optional — you can skip and add later.
               </p>
               <div className="flex gap-2">
                 <input
@@ -126,7 +147,7 @@ export function Onboarding({
                     }
                   }}
                   className="flex-1 px-3 py-2 rounded bg-neutral-950 border border-neutral-800 font-mono text-sm focus:outline-none focus:border-neutral-600"
-                  placeholder="my-org"
+                  placeholder="my-org or my-username"
                   autoFocus
                 />
                 <button
@@ -155,6 +176,12 @@ export function Onboarding({
                   ))}
                 </div>
               )}
+              {autoAddedLogin && orgs.includes(autoAddedLogin) && (
+                <p className="text-xs text-neutral-500">
+                  Added your GitHub account from <code>gh</code>. Remove it if you'd
+                  rather not include your personal repos.
+                </p>
+              )}
               <p className="text-xs text-neutral-500">
                 Requires <code>gh</code> CLI authed. If you don't have it:{" "}
                 <code>brew install gh && gh auth login</code>.
@@ -182,7 +209,8 @@ export function Onboarding({
                   </li>
                   <li>
                     <span className="text-neutral-200">Clone missing</span> in the
-                    header pulls down pinned org repos you don't have yet.
+                    header previews repos under your configured accounts so you can
+                    pick what to clone.
                   </li>
                   <li>
                     <span className="text-neutral-200">⌘K</span> focuses search
