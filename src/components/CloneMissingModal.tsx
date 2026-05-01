@@ -185,6 +185,7 @@ export function CloneMissingModal({ reposPath, onClose }: Props) {
             value={query}
             onChange={(e) => setQuery(e.currentTarget.value)}
             placeholder="Filter by name…"
+            autoFocus
             className="w-full px-3 py-1.5 rounded bg-neutral-900 border border-neutral-800 font-mono text-sm focus:outline-none focus:border-neutral-600"
           />
           <label className="flex items-center gap-2 text-xs text-neutral-400 select-none cursor-pointer">
