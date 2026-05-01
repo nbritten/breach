@@ -110,10 +110,10 @@ export function Onboarding({
 
           {step === 2 && (
             <div className="flex-1 flex flex-col gap-4">
-              <h2 className="text-lg font-semibold">Add your GitHub orgs</h2>
+              <h2 className="text-lg font-semibold">Add your GitHub accounts</h2>
               <p className="text-sm text-neutral-400">
-                Clone missing uses these to discover your team's repos via{" "}
-                <code>gh</code>. Optional — you can skip and add later.
+                Clone missing previews repos under each of these accounts (orgs or
+                users) via <code>gh</code>. Optional — you can skip and add later.
               </p>
               <div className="flex gap-2">
                 <input
@@ -126,7 +126,7 @@ export function Onboarding({
                     }
                   }}
                   className="flex-1 px-3 py-2 rounded bg-neutral-950 border border-neutral-800 font-mono text-sm focus:outline-none focus:border-neutral-600"
-                  placeholder="my-org"
+                  placeholder="my-org or my-username"
                   autoFocus
                 />
                 <button
@@ -182,7 +182,8 @@ export function Onboarding({
                   </li>
                   <li>
                     <span className="text-neutral-200">Clone missing</span> in the
-                    header pulls down pinned org repos you don't have yet.
+                    header previews repos under your configured accounts so you can
+                    pick what to clone.
                   </li>
                   <li>
                     <span className="text-neutral-200">⌘K</span> focuses search

@@ -167,17 +167,17 @@ export function CloneMissingModal({ reposPath, onClose }: Props) {
       {error ? (
         <div className="text-rose-400 text-sm whitespace-pre-wrap">{error}</div>
       ) : phase === "listing" ? (
-        <Spinner label="Listing org repos via gh…" />
+        <Spinner label="Listing repos via gh…" />
       ) : phase === "cloning" ? (
         <Spinner label={`Cloning ${selected.size} repo${selected.size === 1 ? "" : "s"}…`} />
       ) : phase === "picking" && !orgsConfigured ? (
         <div className="text-neutral-500 italic text-sm">
-          No orgs configured. Add one in Settings → GitHub orgs.
+          No accounts configured. Add one in Settings → GitHub accounts.
         </div>
       ) : phase === "picking" && candidates.length === 0 ? (
         <div className="text-neutral-400 text-sm flex items-center gap-2">
           <span className="text-emerald-400">✓</span>
-          Everything in your configured orgs is already cloned.
+          Everything in your configured accounts is already cloned.
         </div>
       ) : phase === "picking" ? (
         <div className="flex flex-col gap-3">

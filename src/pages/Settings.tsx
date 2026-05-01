@@ -324,24 +324,24 @@ export function Settings() {
         </SettingsSection>
 
         <SettingsSection
-          label="GitHub orgs"
+          label="GitHub accounts"
           description={
             <>
-              Clone missing walks repos in these orgs and clones any pinned repos that
-              aren't local yet. If no pins are set, it clones every non-archived repo.
-              Requires <code>gh</code> CLI authed.
+              Clone missing previews every non-archived repo in these accounts (orgs or
+              users) so you can pick what to clone. PR badges and CI dots also query
+              against this list. Requires <code>gh</code> CLI authed.
             </>
           }
           onAdd={addOrgRow}
           itemCount={orgs.length}
-          emptyLabel="No orgs configured. Click + Add to create one."
+          emptyLabel="No accounts configured. Click + Add to create one."
         >
           {orgs.map((o) => (
             <div key={o.id} className="grid grid-cols-[1fr_auto] gap-2 items-center">
               <input
                 value={o.org}
                 onChange={(e) => updateOrgRow(o.id, e.currentTarget.value)}
-                placeholder="my-org"
+                placeholder="my-org or my-username"
                 className={INPUT_CLS}
               />
               <RemoveButton onClick={() => removeOrgRow(o.id)} label="Remove org" />
