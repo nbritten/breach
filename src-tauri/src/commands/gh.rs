@@ -359,6 +359,12 @@ pub async fn clone_repos(
         .await
         .map_err(|e| format!("cannot create {}: {e}", root.display()))?;
 
+    // Reject bare names early: rsplit would otherwise produce name == slug, and
+    // `gh repo clone <bare>` would fail with a less obvious error per-repo.
+    if let Some(bad) = slugs.iter().find(|s| !s.contains('/')) {
+        return Err(format!("invalid slug {bad:?}: expected `org/name`"));
+    }
+
     let entries: Vec<(String, String, PathBuf)> = slugs
         .into_iter()
         .filter_map(|s| {
