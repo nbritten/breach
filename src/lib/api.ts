@@ -56,4 +56,6 @@ export const api = {
   listTerminalApps: () => invoke<string[]>("list_terminal_apps"),
   defaultReposPath: () => invoke<string>("default_repos_path"),
   homeRelative: (path: string) => invoke<string>("home_relative", { path }),
+  startReposWatcher: (reposPath: string) =>
+    invoke<void>("start_repos_watcher", { reposPath }),
 };

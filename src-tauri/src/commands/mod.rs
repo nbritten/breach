@@ -1,6 +1,7 @@
 pub mod gh;
 pub mod notifications;
 pub mod repos;
+pub mod watcher;
 pub mod shell;
 pub mod sync;
 

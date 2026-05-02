@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { api } from "../lib/api";
 import {
   buildServiceUrl,
@@ -108,14 +109,58 @@ export function Dashboard() {
 
   usePrNotificationsPoll(orgs.length > 0, 30_000, () => refreshPrs(orgs));
 
+  // Single-repo refresh is best-effort: if the repo was deleted between the
+  // watcher event and our refetch, repoSummary errors out — fall back to a
+  // full re-list so the deleted card is removed instead of going stale.
+  const refreshRef = useRef<() => void>(() => {});
   const refreshOne = useCallback(async (path: string) => {
-    const updated = await api.repoSummary(path);
-    setRepos((prev) => prev.map((r) => (r.path === path ? updated : r)));
+    try {
+      const updated = await api.repoSummary(path);
+      setRepos((prev) => prev.map((r) => (r.path === path ? updated : r)));
+    } catch {
+      refreshRef.current();
+    }
   }, []);
+  refreshRef.current = refresh;
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Start (or restart, on path change) the backend filesystem watcher so we
+  // get push-style updates instead of relying on the Refresh button.
+  useEffect(() => {
+    if (!reposPath) return;
+    api.startReposWatcher(reposPath).catch((err) => {
+      console.warn("startReposWatcher failed", err);
+    });
+  }, [reposPath]);
+
+  // Listen for repo-changed events emitted by the watcher and re-fetch just
+  // the affected repo. Reads the latest repo list via a ref so the listener
+  // doesn't need to re-bind on every state change. An event for a path we
+  // don't have yet (new clone, removed dir) triggers a full re-list.
+  const reposRef = useRef(repos);
+  reposRef.current = repos;
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    listen<{ path: string }>("repo-changed", (event) => {
+      const path = event.payload.path;
+      if (reposRef.current.some((r) => r.path === path)) {
+        refreshOne(path);
+      } else {
+        refresh();
+      }
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [refresh, refreshOne]);
 
   const dirtyCount = repos.filter((r) => r.dirty).length;
   const { query } = useSearch();
