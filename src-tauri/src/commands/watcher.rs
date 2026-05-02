@@ -86,6 +86,11 @@ pub fn start_repos_watcher(
     }
 
     let root_for_task = root.clone();
+    // The dispatch loop ends when `rx.recv()` returns None, which only happens
+    // once every `tx` clone has been dropped. The debouncer is the sole owner
+    // of `tx`, so dropping it (on the next start_repos_watcher call, or on app
+    // shutdown) is what tears this task down. Don't add other tx clones unless
+    // you're prepared to manage them.
     tokio::spawn(async move {
         while let Some(result) = rx.recv().await {
             // notify can surface filesystem errors here (e.g. transient permission
