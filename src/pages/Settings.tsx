@@ -89,8 +89,12 @@ export function Settings() {
         showError(e);
       }
     })();
-    // Detected-terminals lookup is best-effort; failures shouldn't block the form.
-    api.listTerminalApps().then(setTerminalSuggestions).catch(() => {});
+    // Detected-terminals lookup is best-effort; failures shouldn't block the form,
+    // but they're surfaced via console.warn so a real bug isn't invisible during dev.
+    api
+      .listTerminalApps()
+      .then(setTerminalSuggestions)
+      .catch((e) => console.warn("listTerminalApps failed", e));
   }, [showError]);
 
   const save = async (): Promise<boolean> => {
