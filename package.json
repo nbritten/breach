@@ -1,7 +1,7 @@
 {
   "name": "breach",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "A macOS dashboard for every local git repo.",
   "author": "natbritten",
   "license": "MIT",
