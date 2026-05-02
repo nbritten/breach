@@ -94,7 +94,13 @@ pub fn start_repos_watcher(
     // of `tx`, so dropping it (on the next start_repos_watcher call, or on app
     // shutdown) is what tears this task down. Don't add other tx clones unless
     // you're prepared to manage them.
-    tokio::spawn(async move {
+    //
+    // We use `tauri::async_runtime::spawn` rather than bare `tokio::spawn`
+    // because this command is sync (`fn`, not `async fn`) and runs on the IPC
+    // thread, which doesn't have a Tokio runtime context attached — `tokio::spawn`
+    // would panic with "no reactor running" and abort the process. Tauri's helper
+    // explicitly hops onto its managed runtime.
+    tauri::async_runtime::spawn(async move {
         while let Some(result) = rx.recv().await {
             // notify can surface filesystem errors here (e.g. transient permission
             // hiccups); a single bad batch shouldn't kill the whole watch loop.
