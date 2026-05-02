@@ -109,10 +109,19 @@ export function Dashboard() {
 
   usePrNotificationsPoll(orgs.length > 0, 30_000, () => refreshPrs(orgs));
 
+  // Single-repo refresh is best-effort: if the repo was deleted between the
+  // watcher event and our refetch, repoSummary errors out — fall back to a
+  // full re-list so the deleted card is removed instead of going stale.
+  const refreshRef = useRef<() => void>(() => {});
   const refreshOne = useCallback(async (path: string) => {
-    const updated = await api.repoSummary(path);
-    setRepos((prev) => prev.map((r) => (r.path === path ? updated : r)));
+    try {
+      const updated = await api.repoSummary(path);
+      setRepos((prev) => prev.map((r) => (r.path === path ? updated : r)));
+    } catch {
+      refreshRef.current();
+    }
   }, []);
+  refreshRef.current = refresh;
 
   useEffect(() => {
     refresh();
