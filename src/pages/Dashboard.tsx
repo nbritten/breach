@@ -116,7 +116,11 @@ export function Dashboard() {
       repos
         .filter((r) => r.branch)
         .map((r) => ({ path: r.path, branch: r.branch as string })),
-    setCiByPath,
+    // Merge rather than replace: list_ci_status drops repos whose gh call
+    // errored or returned no runs, so a transient gh hiccup on any one repo
+    // would otherwise wipe its dot until the next tick. Full refresh()
+    // (focus / watcher) still uses replace and prunes stale keys.
+    (result) => setCiByPath((prev) => ({ ...prev, ...result })),
   );
 
   // Single-repo refresh is best-effort: if the repo was deleted between the
