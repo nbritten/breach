@@ -95,9 +95,14 @@ pub fn start_repos_watcher(
         while let Some(result) = rx.recv().await {
             // notify can surface filesystem errors here (e.g. transient permission
             // hiccups); a single bad batch shouldn't kill the whole watch loop.
+            // We log so a runaway dead-watcher is at least diagnosable in the
+            // dev-tools console rather than silently freezing live updates.
             let events = match result {
                 Ok(events) => events,
-                Err(_) => continue,
+                Err(errs) => {
+                    eprintln!("repos watcher: dropped batch ({} errors)", errs.len());
+                    continue;
+                }
             };
             let mut affected: HashSet<PathBuf> = HashSet::new();
             for event in events {
