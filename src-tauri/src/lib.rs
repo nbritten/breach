@@ -37,6 +37,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::new().build())
+        .manage(commands::watcher::WatcherState::default())
         .invoke_handler(tauri::generate_handler![
             commands::repos::list_repos,
             commands::repos::repo_summary,
@@ -58,6 +59,7 @@ pub fn run() {
             commands::notifications::pr_notifications_changed,
             commands::shell::open_in_terminal,
             commands::shell::list_terminal_apps,
+            commands::watcher::start_repos_watcher,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
