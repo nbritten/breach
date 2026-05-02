@@ -25,8 +25,16 @@ fn app_installed(bundle: &str) -> bool {
     candidates.iter().any(|p| p.exists())
 }
 
-fn ghostty_installed() -> bool {
-    app_installed("Ghostty.app")
+/// First installed app from `KNOWN_TERMINALS` (in list order), or `Terminal` as
+/// the universal fallback. The list order doubles as the auto-detect preference,
+/// so reordering it changes which terminal a zero-config user gets.
+fn auto_detect_terminal() -> &'static str {
+    for (name, bundle) in KNOWN_TERMINALS {
+        if app_installed(bundle) {
+            return name;
+        }
+    }
+    "Terminal"
 }
 
 /// List installed terminal apps from the known set, plus the always-present
@@ -44,8 +52,8 @@ pub fn list_terminal_apps() -> Vec<String> {
 }
 
 /// Open a directory in a macOS terminal. Uses `app` when non-empty; otherwise
-/// auto-detects (Ghostty if installed, else Terminal). Returns the name of the
-/// app that was launched.
+/// auto-detects the first installed terminal from the known set, falling back
+/// to Terminal. Returns the name of the app that was launched.
 #[tauri::command]
 pub async fn open_in_terminal(
     repo_path: String,
@@ -57,13 +65,7 @@ pub async fn open_in_terminal(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string)
-        .unwrap_or_else(|| {
-            if ghostty_installed() {
-                "Ghostty".to_string()
-            } else {
-                "Terminal".to_string()
-            }
-        });
+        .unwrap_or_else(|| auto_detect_terminal().to_string());
     let output = tokio::process::Command::new("open")
         .arg("-a")
         .arg(&chosen)

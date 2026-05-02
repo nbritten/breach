@@ -146,7 +146,7 @@ export function Dashboard() {
               {repos.length} repos · {dirtyCount} dirty
             </span>
           )}
-          <Tooltip content="Open your repos directory in your configured terminal app (auto-detect if not set).">
+          <Tooltip content="Open your repos directory in your configured terminal app, or the first known terminal we find installed if not set.">
             <button
               onClick={() => reposPath && openTerminal(reposPath).catch(showError)}
               disabled={!reposPath}

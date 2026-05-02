@@ -250,9 +250,10 @@ export function Settings() {
             Terminal app
           </label>
           <p className="text-xs text-neutral-500 mb-2">
-            App opened by the Terminal button. Leave empty to auto-detect (Ghostty
-            if installed, else Terminal). Type any app name — autocomplete shows
-            terminals we found in <code>/Applications</code>.
+            App opened by the Terminal button. Leave empty to auto-detect — Breach
+            picks the first known terminal it finds installed, falling back to
+            Terminal. Type any app name; autocomplete shows the terminals we found
+            in <code>/Applications</code>.
           </p>
           <input
             id="terminal-app"
