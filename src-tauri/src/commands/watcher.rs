@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use notify::{RecommendedWatcher, RecursiveMode};
-use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileIdMap};
+use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
@@ -13,7 +13,10 @@ use super::expand;
 /// Tauri-managed handle for the active filesystem watcher. Holding it alive
 /// keeps the watcher running; replacing it stops the previous one (the spawned
 /// dispatch task ends on its own once its channel closes).
-type AppDebouncer = Debouncer<RecommendedWatcher, FileIdMap>;
+///
+/// `RecommendedCache` differs by platform (FileIdMap on macOS, NoCache on
+/// Linux), so we lean on the alias rather than hardcoding either.
+type AppDebouncer = Debouncer<RecommendedWatcher, RecommendedCache>;
 
 #[derive(Default)]
 pub struct WatcherState {
