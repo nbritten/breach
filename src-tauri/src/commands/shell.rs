@@ -34,7 +34,7 @@ fn app_installed(bundle: &str) -> bool {
 /// the universal fallback. The list order doubles as the auto-detect preference,
 /// so reordering it changes which terminal a zero-config user gets.
 fn auto_detect_terminal() -> &'static str {
-    auto_detect_with(|bundle| app_installed(bundle))
+    auto_detect_with(app_installed)
 }
 
 /// Pure variant of `auto_detect_terminal` parameterized on the install check, so
