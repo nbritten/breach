@@ -127,6 +127,15 @@ export function Dashboard() {
     refresh();
   }, [refresh]);
 
+  // Catch sleep/wake gaps and "tabbed away for an hour" cases the watcher
+  // can't cover on its own — FSEvents occasionally misses across sleep, and
+  // remote-driven state (PRs, CI) doesn't show up in the local filesystem.
+  useEffect(() => {
+    const onFocus = () => refresh();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refresh]);
+
   // Start (or restart, on path change) the backend filesystem watcher so we
   // get push-style updates instead of relying on the Refresh button.
   useEffect(() => {
