@@ -90,8 +90,11 @@ export async function setTerminalApp(app: string): Promise<void> {
   await store.save();
 }
 
-/// Open the path in whichever terminal the user has configured. Empty setting
-/// falls back to the backend's auto-detect (Ghostty if installed, else Terminal).
+/**
+ * Open the path in whichever terminal the user has configured. Empty setting
+ * falls back to the backend's auto-detect: the first installed terminal from
+ * the known set, or Terminal as the universal fallback.
+ */
 export async function openTerminal(repoPath: string): Promise<string> {
   const app = await getTerminalApp();
   return api.openInTerminal(repoPath, app);
