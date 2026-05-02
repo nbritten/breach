@@ -117,6 +117,11 @@ export function useCiStatusPoll(
       }
     };
 
+    // No visibility-change re-tick (unlike usePrNotificationsPoll): Dashboard
+    // already runs a full refresh on window focus, which re-fetches CI as part
+    // of refresh() — so adding one here would just duplicate work right after
+    // the user comes back. Removing the focus-refresh hook means this should
+    // grow a visibility tick.
     const id = window.setInterval(tick, intervalMs);
     return () => {
       cancelled = true;
