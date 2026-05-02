@@ -14,7 +14,7 @@ import {
 import { useSearch } from "../lib/search";
 import { useToast } from "../lib/toast";
 import { errorText } from "../lib/errors";
-import { usePrNotificationsPoll } from "../lib/hooks";
+import { useCiStatusPoll, usePrNotificationsPoll } from "../lib/hooks";
 
 import { RepoCard } from "../components/RepoCard";
 import { SyncAllModal } from "../components/SyncAllModal";
@@ -108,6 +108,20 @@ export function Dashboard() {
   }, [refreshPrs]);
 
   usePrNotificationsPoll(orgs.length > 0, 30_000, () => refreshPrs(orgs));
+
+  useCiStatusPoll(
+    repos.length > 0,
+    90_000,
+    () =>
+      repos
+        .filter((r) => r.branch)
+        .map((r) => ({ path: r.path, branch: r.branch as string })),
+    // Merge rather than replace: list_ci_status drops repos whose gh call
+    // errored or returned no runs, so a transient gh hiccup on any one repo
+    // would otherwise wipe its dot until the next tick. Full refresh()
+    // (focus / watcher) still uses replace and prunes stale keys.
+    (result) => setCiByPath((prev) => ({ ...prev, ...result })),
+  );
 
   // Single-repo refresh is best-effort: if the repo was deleted between the
   // watcher event and our refetch, repoSummary errors out — fall back to a

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { api } from "./api";
+import type { CiStatus } from "../types";
 
 /**
  * Listen for the Escape key and fire `onEscape`. Set `enabled` to false to skip
@@ -73,6 +74,58 @@ export function usePrNotificationsPoll(
       cancelled = true;
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [enabled, intervalMs]);
+}
+
+/**
+ * Poll listCiStatus on a fixed interval while the document is visible, so CI
+ * dots track in-progress runs as they flip green/red without forcing the user
+ * to hit Refresh. Unlike PRs, gh's run-list endpoint doesn't expose a
+ * conditional-GET header, so this is plain interval polling — keep the
+ * cadence relaxed.
+ *
+ * `request` is called on each tick to read the latest set of (path, branch)
+ * pairs, so it stays in sync with the current repo list without re-binding
+ * the effect.
+ */
+export function useCiStatusPoll(
+  enabled: boolean,
+  intervalMs: number,
+  request: () => Array<{ path: string; branch: string }>,
+  onUpdate: (statuses: Record<string, CiStatus>) => void,
+) {
+  const requestRef = useRef(request);
+  requestRef.current = request;
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+
+    const tick = async () => {
+      if (document.visibilityState !== "visible") return;
+      const repos = requestRef.current();
+      if (repos.length === 0) return;
+      try {
+        const result = await api.listCiStatus(repos);
+        if (cancelled) return;
+        onUpdateRef.current(result);
+      } catch (err) {
+        console.warn("CI status poll failed", err);
+      }
+    };
+
+    // No visibility-change re-tick (unlike usePrNotificationsPoll): Dashboard
+    // already runs a full refresh on window focus, which re-fetches CI as part
+    // of refresh() — so adding one here would just duplicate work right after
+    // the user comes back. Removing the focus-refresh hook means this should
+    // grow a visibility tick.
+    const id = window.setInterval(tick, intervalMs);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
     };
   }, [enabled, intervalMs]);
 }
