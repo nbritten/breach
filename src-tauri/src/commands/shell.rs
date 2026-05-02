@@ -15,6 +15,11 @@ const KNOWN_TERMINALS: &[(&str, &str)] = &[
     ("Tabby", "Tabby.app"),
 ];
 
+/// Built-in macOS terminal we always fall back to — guaranteed present on any
+/// macOS install, so we don't list it in `KNOWN_TERMINALS` (which is for
+/// detection) and don't try to validate that it exists.
+const FALLBACK_TERMINAL: &str = "Terminal";
+
 fn app_installed(bundle: &str) -> bool {
     let candidates = [
         PathBuf::from("/Applications").join(bundle),
@@ -34,7 +39,7 @@ fn auto_detect_terminal() -> &'static str {
             return name;
         }
     }
-    "Terminal"
+    FALLBACK_TERMINAL
 }
 
 /// List installed terminal apps from the known set, plus the always-present
@@ -47,7 +52,7 @@ pub fn list_terminal_apps() -> Vec<String> {
         .filter(|(_, bundle)| app_installed(bundle))
         .map(|(name, _)| (*name).to_string())
         .collect();
-    found.push("Terminal".to_string());
+    found.push(FALLBACK_TERMINAL.to_string());
     found
 }
 
