@@ -8,6 +8,7 @@ import {
   getReposPath,
   getServiceRepos,
   getServiceUrlTemplate,
+  getTerminalApp,
   setBranchOverrides,
   setDefaultBranch,
   setPinnedRepos,
@@ -15,6 +16,7 @@ import {
   setReposPath,
   setServiceRepos,
   setServiceUrlTemplate,
+  setTerminalApp,
 } from "./settings";
 
 export const SETTINGS_VERSION = 1;
@@ -29,6 +31,7 @@ export interface SettingsExport {
     pinnedRepos: string[];
     serviceUrlTemplate: string;
     serviceRepos: string[];
+    terminalApp: string;
   };
 }
 
@@ -43,6 +46,7 @@ export async function buildExport(): Promise<SettingsExport> {
     pinnedRepos,
     serviceUrlTemplate,
     serviceRepos,
+    terminalApp,
   ] = await Promise.all([
     getReposPath(),
     getDefaultBranch(),
@@ -51,6 +55,7 @@ export async function buildExport(): Promise<SettingsExport> {
     getPinnedRepos(),
     getServiceUrlTemplate(),
     getServiceRepos(),
+    getTerminalApp(),
   ]);
   return {
     version: SETTINGS_VERSION,
@@ -62,6 +67,7 @@ export async function buildExport(): Promise<SettingsExport> {
       pinnedRepos,
       serviceUrlTemplate,
       serviceRepos,
+      terminalApp,
     },
   };
 }
@@ -125,8 +131,25 @@ export function parseImport(text: string): SettingsExport {
   if (!isStringArray(s.pinnedRepos)) throw new Error("`pinnedRepos` must be string[]");
   if (typeof s.serviceUrlTemplate !== "string") throw new Error("`serviceUrlTemplate` must be a string");
   if (!isStringArray(s.serviceRepos)) throw new Error("`serviceRepos` must be string[]");
+  // terminalApp was added after v1 shipped; treat a missing value as "" (auto-detect)
+  // so older exports keep importing cleanly. Wrong-type values still error loudly.
+  if (s.terminalApp !== undefined && typeof s.terminalApp !== "string") {
+    throw new Error("`terminalApp` must be a string");
+  }
 
-  return data as unknown as SettingsExport;
+  return {
+    version: data.version,
+    settings: {
+      reposPath: s.reposPath,
+      defaultBranch: s.defaultBranch,
+      branchOverrides: s.branchOverrides,
+      repoOrgs: s.repoOrgs,
+      pinnedRepos: s.pinnedRepos,
+      serviceUrlTemplate: s.serviceUrlTemplate,
+      serviceRepos: s.serviceRepos,
+      terminalApp: typeof s.terminalApp === "string" ? s.terminalApp : "",
+    },
+  };
 }
 
 export async function applyImport(payload: SettingsExport): Promise<void> {
@@ -139,6 +162,7 @@ export async function applyImport(payload: SettingsExport): Promise<void> {
     setPinnedRepos(s.pinnedRepos),
     setServiceUrlTemplate(s.serviceUrlTemplate),
     setServiceRepos(s.serviceRepos),
+    setTerminalApp(s.terminalApp),
   ]);
 }
 
@@ -162,6 +186,7 @@ function normalizeSettings(
     pinnedRepos: s.pinnedRepos.map((x) => x.trim()).filter((x) => x.length > 0),
     serviceUrlTemplate: s.serviceUrlTemplate.trim(),
     serviceRepos: s.serviceRepos.map((x) => x.trim()).filter((x) => x.length > 0),
+    terminalApp: s.terminalApp.trim(),
   };
 }
 

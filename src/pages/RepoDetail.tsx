@@ -5,6 +5,7 @@ import {
   branchForRepo,
   getBranchOverrides,
   getDefaultBranch,
+  openTerminal,
 } from "../lib/settings";
 import { useToast } from "../lib/toast";
 import { errorText } from "../lib/errors";
@@ -96,7 +97,7 @@ export function RepoDetail() {
           <p className="text-xs text-neutral-500 font-mono truncate">{repoPath}</p>
         </div>
         <button
-          onClick={() => api.openInTerminal(repoPath).catch(showError)}
+          onClick={() => openTerminal(repoPath).catch(showError)}
           title="Open in terminal"
           className="shrink-0 px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm flex items-center gap-1.5"
         >

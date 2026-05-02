@@ -7,6 +7,7 @@ import {
   getReposPath,
   getServiceRepos,
   getServiceUrlTemplate,
+  openTerminal,
   setPinnedRepos,
 } from "../lib/settings";
 import { useSearch } from "../lib/search";
@@ -145,9 +146,9 @@ export function Dashboard() {
               {repos.length} repos · {dirtyCount} dirty
             </span>
           )}
-          <Tooltip content="Open your repos directory in a terminal (Ghostty if installed, else Terminal.app).">
+          <Tooltip content="Open your repos directory in your configured terminal app (auto-detect if not set).">
             <button
-              onClick={() => reposPath && api.openInTerminal(reposPath).catch(showError)}
+              onClick={() => reposPath && openTerminal(reposPath).catch(showError)}
               disabled={!reposPath}
               className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50 flex items-center gap-1.5"
             >

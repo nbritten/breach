@@ -51,8 +51,9 @@ export const api = {
     invoke<NotificationPoll>("pr_notifications_changed", { lastModified }),
   listCiStatus: (repos: { path: string; branch: string }[]) =>
     invoke<Record<string, CiStatus>>("list_ci_status", { repos }),
-  openInTerminal: (repoPath: string) =>
-    invoke<string>("open_in_terminal", { repoPath }),
+  openInTerminal: (repoPath: string, app: string) =>
+    invoke<string>("open_in_terminal", { repoPath, app }),
+  listTerminalApps: () => invoke<string[]>("list_terminal_apps"),
   defaultReposPath: () => invoke<string>("default_repos_path"),
   homeRelative: (path: string) => invoke<string>("home_relative", { path }),
 };
