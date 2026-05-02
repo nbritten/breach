@@ -14,6 +14,7 @@ const PINNED_REPOS_KEY = "pinnedRepos";
 const ONBOARDED_KEY = "onboarded";
 const SERVICE_URL_TEMPLATE_KEY = "serviceUrlTemplate";
 const SERVICE_REPOS_KEY = "serviceRepos";
+const TERMINAL_APP_KEY = "terminalApp";
 
 export const FALLBACK_DEFAULT_BRANCH = "main";
 
@@ -78,6 +79,25 @@ export async function getServiceRepos(): Promise<string[]> {
 export async function setServiceRepos(list: string[]): Promise<void> {
   await store.set(SERVICE_REPOS_KEY, list);
   await store.save();
+}
+
+export async function getTerminalApp(): Promise<string> {
+  return (await store.get<string>(TERMINAL_APP_KEY)) ?? "";
+}
+
+export async function setTerminalApp(app: string): Promise<void> {
+  await store.set(TERMINAL_APP_KEY, app);
+  await store.save();
+}
+
+/**
+ * Open the path in whichever terminal the user has configured. Empty setting
+ * falls back to the backend's auto-detect: the first installed terminal from
+ * the known set, or Terminal as the universal fallback.
+ */
+export async function openTerminal(repoPath: string): Promise<string> {
+  const app = await getTerminalApp();
+  return api.openInTerminal(repoPath, app);
 }
 
 export function buildServiceUrl(

@@ -57,6 +57,7 @@ pub fn run() {
             commands::gh::list_ci_status,
             commands::notifications::pr_notifications_changed,
             commands::shell::open_in_terminal,
+            commands::shell::list_terminal_apps,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

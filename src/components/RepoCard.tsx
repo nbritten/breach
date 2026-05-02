@@ -1,7 +1,7 @@
 import { useState, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { api } from "../lib/api";
+import { openTerminal } from "../lib/settings";
 import { useToast } from "../lib/toast";
 import type { CiStatus, PrInfo, RepoSummary } from "../types";
 
@@ -178,7 +178,7 @@ export function RepoCard({
             onClick={(e: MouseEvent) => {
               e.preventDefault();
               e.stopPropagation();
-              api.openInTerminal(repo.path).catch(showError);
+              openTerminal(repo.path).catch(showError);
             }}
             title="Open in terminal"
             aria-label="Open in terminal"

@@ -11,6 +11,7 @@ import {
   getReposPath,
   getServiceRepos,
   getServiceUrlTemplate,
+  getTerminalApp,
   setBranchOverrides,
   setDefaultBranch,
   setPinnedRepos,
@@ -18,10 +19,12 @@ import {
   setReposPath,
   setServiceRepos,
   setServiceUrlTemplate,
+  setTerminalApp,
 } from "../lib/settings";
 import { SettingsSection } from "../components/settings/SettingsSection";
 import { RemoveButton } from "../components/settings/RemoveButton";
 import { useToast } from "../lib/toast";
+import { api } from "../lib/api";
 import {
   applyImport,
   buildExport,
@@ -52,6 +55,8 @@ export function Settings() {
   const [pins, setPins] = useState<PinRow[]>([]);
   const [serviceTpl, setServiceTpl] = useState("");
   const [services, setServices] = useState<ServiceRow[]>([]);
+  const [terminalApp, setTerminalAppState] = useState("");
+  const [terminalSuggestions, setTerminalSuggestions] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const [imported, setImported] = useState(false);
   const { show: showOnboarding } = useOnboarding();
@@ -60,7 +65,7 @@ export function Settings() {
   useEffect(() => {
     (async () => {
       try {
-        const [p, f, overrides, orgList, pinList, tpl, serviceList] =
+        const [p, f, overrides, orgList, pinList, tpl, serviceList, term] =
           await Promise.all([
             getReposPath(),
             getDefaultBranch(),
@@ -69,6 +74,7 @@ export function Settings() {
             getPinnedRepos(),
             getServiceUrlTemplate(),
             getServiceRepos(),
+            getTerminalApp(),
           ]);
         setPath(p);
         setFallback(f);
@@ -78,10 +84,17 @@ export function Settings() {
         setPins(pinList.map((n) => newPinRow(n)));
         setServiceTpl(tpl);
         setServices(serviceList.map((n) => newServiceRow(n)));
+        setTerminalAppState(term);
       } catch (e) {
         showError(e);
       }
     })();
+    // Detected-terminals lookup is best-effort; failures shouldn't block the form,
+    // but they're surfaced via console.warn so a real bug isn't invisible during dev.
+    api
+      .listTerminalApps()
+      .then(setTerminalSuggestions)
+      .catch((e) => console.warn("listTerminalApps failed", e));
   }, [showError]);
 
   const save = async (): Promise<boolean> => {
@@ -105,6 +118,7 @@ export function Settings() {
         setPinnedRepos(pinList),
         setServiceUrlTemplate(serviceTpl.trim()),
         setServiceRepos(serviceList),
+        setTerminalApp(terminalApp.trim()),
       ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
@@ -159,7 +173,7 @@ export function Settings() {
       const payload = parseImport(text);
       await applyImport(payload);
       // Reload visible state from store so the form reflects what was just imported.
-      const [p, f, overrides, orgList, pinList, tpl, serviceList] =
+      const [p, f, overrides, orgList, pinList, tpl, serviceList, term] =
         await Promise.all([
           getReposPath(),
           getDefaultBranch(),
@@ -168,6 +182,7 @@ export function Settings() {
           getPinnedRepos(),
           getServiceUrlTemplate(),
           getServiceRepos(),
+          getTerminalApp(),
         ]);
       setPath(p);
       setFallback(f);
@@ -177,6 +192,7 @@ export function Settings() {
       setPins(pinList.map((n) => newPinRow(n)));
       setServiceTpl(tpl);
       setServices(serviceList.map((n) => newServiceRow(n)));
+      setTerminalAppState(term);
       setImported(true);
       setTimeout(() => setImported(false), 1500);
     } catch (e) {
@@ -228,6 +244,34 @@ export function Settings() {
             className={`w-64 py-2 ${INPUT_CLS}`}
             placeholder="main"
           />
+        </section>
+
+        <section className="mb-8">
+          <label
+            htmlFor="terminal-app"
+            className="block text-sm font-medium mb-1"
+          >
+            Terminal app
+          </label>
+          <p className="text-xs text-neutral-500 mb-2">
+            App opened by the Terminal button. Leave empty to auto-detect — Breach
+            picks the first known terminal it finds installed, falling back to
+            Terminal. Type any app name; autocomplete shows the terminals we found
+            in <code>/Applications</code>.
+          </p>
+          <input
+            id="terminal-app"
+            list="terminal-app-suggestions"
+            value={terminalApp}
+            onChange={(e) => setTerminalAppState(e.currentTarget.value)}
+            className={`w-64 py-2 ${INPUT_CLS}`}
+            placeholder="Auto-detect"
+          />
+          <datalist id="terminal-app-suggestions">
+            {terminalSuggestions.map((t) => (
+              <option key={t} value={t} />
+            ))}
+          </datalist>
         </section>
 
         <SettingsSection

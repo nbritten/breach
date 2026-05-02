@@ -11,6 +11,7 @@ const validPayload: SettingsExport = {
     pinnedRepos: ["foo"],
     serviceUrlTemplate: "https://{name}.example.com",
     serviceRepos: ["foo"],
+    terminalApp: "Ghostty",
   },
 };
 
@@ -59,5 +60,20 @@ describe("parseImport", () => {
       settings: { ...validPayload.settings, branchOverrides: { foo: 7 } },
     };
     expect(() => parseImport(JSON.stringify(bad))).toThrow(/branchOverrides/);
+  });
+
+  it("treats a missing terminalApp as empty (older exports stay importable)", () => {
+    const { terminalApp: _t, ...withoutTerminal } = validPayload.settings;
+    const old = { ...validPayload, settings: withoutTerminal };
+    const parsed = parseImport(JSON.stringify(old));
+    expect(parsed.settings.terminalApp).toBe("");
+  });
+
+  it("rejects a non-string terminalApp", () => {
+    const bad = {
+      ...validPayload,
+      settings: { ...validPayload.settings, terminalApp: 42 },
+    };
+    expect(() => parseImport(JSON.stringify(bad))).toThrow(/terminalApp/);
   });
 });
