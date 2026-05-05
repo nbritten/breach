@@ -266,9 +266,23 @@ export function Dashboard() {
             <button
               onClick={refresh}
               disabled={loading}
-              className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50"
+              aria-label="Refresh"
+              className="p-1.5 rounded text-neutral-500 hover:text-neutral-100 hover:bg-neutral-800 disabled:opacity-50"
             >
-              {loading ? "Refreshing…" : "Refresh"}
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={loading ? "animate-spin" : ""}
+              >
+                <path d="M21 12a9 9 0 1 1-3-6.7" />
+                <path d="M21 3v6h-6" />
+              </svg>
             </button>
           </Tooltip>
         </div>
