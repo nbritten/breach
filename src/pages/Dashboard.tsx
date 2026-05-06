@@ -211,7 +211,7 @@ export function Dashboard() {
         <div className="flex items-center gap-3 text-sm">
           {repos.length > 0 && (
             <span className="text-neutral-500">
-              {repos.length} repos · {dirtyCount} dirty
+              {repos.length} repos · {dirtyCount} changed
             </span>
           )}
           <Tooltip content="Open your repos directory in your configured terminal app, or the first known terminal we find installed if not set.">
@@ -248,8 +248,8 @@ export function Dashboard() {
           <Tooltip
             content={
               pinnedOrder.length > 0
-                ? "For each pinned repo: git fetch origin <default>, checkout <default>, merge --ff-only. Skips any dirty repo."
-                : "For every local repo: git fetch origin <default>, checkout <default>, merge --ff-only. Skips any dirty repo."
+                ? "For each pinned repo: git fetch origin <default>, checkout <default>, merge --ff-only. Skips any repo with changes."
+                : "For every local repo: git fetch origin <default>, checkout <default>, merge --ff-only. Skips any repo with changes."
             }
           >
             <button
