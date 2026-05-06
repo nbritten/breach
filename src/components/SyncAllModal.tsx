@@ -19,7 +19,7 @@ const STATUS_CONFIG: Record<
   { icon: string; color: string; label: string }
 > = {
   synced: { icon: "✓", color: "text-emerald-400", label: "synced" },
-  skipped_dirty: { icon: "⚠", color: "text-amber-400", label: "skipped (dirty)" },
+  skipped_dirty: { icon: "⚠", color: "text-amber-400", label: "skipped (has changes)" },
   error: { icon: "✗", color: "text-rose-400", label: "error" },
 };
 
