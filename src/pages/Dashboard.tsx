@@ -341,31 +341,25 @@ export function Dashboard() {
                     </button>
                   )}
                   {isOpen && (
-                    s.repos.length === 0 ? (
-                      <div className="text-xs text-neutral-600 italic pl-5">
-                        No local clones.
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                        {s.repos.map((r) => (
-                          <RepoCard
-                            key={r.path}
-                            repo={r}
-                            onRefresh={refreshOne}
-                            authoredPrs={prs.authored[r.name] ?? EMPTY_PRS}
-                            reviewPrs={prs.review_requested[r.name] ?? EMPTY_PRS}
-                            pinned={pinnedOrder.includes(r.name)}
-                            onTogglePin={togglePin}
-                            ci={ciByPath[r.path]}
-                            docsUrl={
-                              serviceSet.has(r.name)
-                                ? buildServiceUrl(serviceTpl, r.name)
-                                : null
-                            }
-                          />
-                        ))}
-                      </div>
-                    )
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                      {s.repos.map((r) => (
+                        <RepoCard
+                          key={r.path}
+                          repo={r}
+                          onRefresh={refreshOne}
+                          authoredPrs={prs.authored[r.name] ?? EMPTY_PRS}
+                          reviewPrs={prs.review_requested[r.name] ?? EMPTY_PRS}
+                          pinned={pinnedOrder.includes(r.name)}
+                          onTogglePin={togglePin}
+                          ci={ciByPath[r.path]}
+                          docsUrl={
+                            serviceSet.has(r.name)
+                              ? buildServiceUrl(serviceTpl, r.name)
+                              : null
+                          }
+                        />
+                      ))}
+                    </div>
                   )}
                 </section>
               );

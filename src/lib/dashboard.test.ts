@@ -73,10 +73,9 @@ describe("groupRepos", () => {
     expect(sections.map((s) => s.key)).toEqual(["__other__"]);
   });
 
-  it("produces empty other when all repos are pinned", () => {
+  it("omits other section when all repos are pinned", () => {
     const sections = groupRepos(repos, ["a", "b", "c", "d"]);
-    expect(sections).toHaveLength(2);
+    expect(sections.map((s) => s.key)).toEqual(["__pinned__"]);
     expect(sections[0].repos.map((r) => r.name)).toEqual(["a", "b", "c", "d"]);
-    expect(sections[1].repos).toEqual([]);
   });
 });
