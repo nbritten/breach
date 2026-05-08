@@ -24,7 +24,8 @@ export function filterRepos(repos: RepoSummary[], query: string): RepoSummary[] 
  * Group repos into a Pinned section (ordered per `pinnedOrder`) followed by an
  * Other section for the rest. When no repos are pinned, returns a single
  * unlabeled section containing everything — callers can choose not to render
- * a header for that case.
+ * a header for that case. Empty Pinned/Other sections are omitted, so callers
+ * never have to render a header over an empty grid.
  */
 export function groupRepos(
   repos: RepoSummary[],
@@ -43,6 +44,8 @@ export function groupRepos(
   if (pinned.length > 0) {
     sections.push({ key: "__pinned__", label: "Pinned", repos: pinned });
   }
-  sections.push({ key: "__other__", label: "Other", repos: other });
+  if (other.length > 0) {
+    sections.push({ key: "__other__", label: "Other", repos: other });
+  }
   return sections;
 }
