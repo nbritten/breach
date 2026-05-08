@@ -106,7 +106,9 @@ export function CleanModal({ repoPath, repoName, onClose, onDone }: Props) {
       </div>
     ) : (
       <>
-        {error && <div className="text-rose-400 text-xs mb-2">{error}</div>}
+        {error && hasFiles && (
+          <div className="text-rose-400 text-xs mb-2">{error}</div>
+        )}
         <div className="flex justify-end gap-2">
           <button
             onClick={onClose}
@@ -143,6 +145,8 @@ export function CleanModal({ repoPath, repoName, onClose, onDone }: Props) {
     >
       {loading ? (
         <div className="text-neutral-500 text-sm">Loading…</div>
+      ) : error && !hasFiles ? (
+        <div className="text-rose-400 text-sm whitespace-pre-wrap">{error}</div>
       ) : !hasFiles ? (
         <div className="text-neutral-500 italic text-sm">
           Working tree is already clean.
