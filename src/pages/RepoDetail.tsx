@@ -54,7 +54,7 @@ export function RepoDetail() {
 
   useEffect(() => {
     if (!repoPath) return;
-    api.repoLog(repoPath, 50).then(setCommits).catch((e) => setError(String(e)));
+    api.repoLog(repoPath, 50).then(setCommits).catch((e) => setError(errorText(e)));
   }, [repoPath, reloadToken]);
 
   useEffect(() => {
