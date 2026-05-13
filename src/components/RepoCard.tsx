@@ -105,7 +105,7 @@ export function RepoCard({
                 ci.workflow ? ` · ${ci.workflow}` : ""
               }`}
               aria-label={CI_DOT[ci.state].label}
-              className={`w-2 h-2 rounded-full shrink-0 ${
+              className={`relative w-2 h-2 rounded-full shrink-0 before:content-[''] before:absolute before:-inset-2 ${
                 CI_DOT[ci.state].color
               } ${CI_DOT[ci.state].pulse ? "animate-pulse" : ""}`}
             />
