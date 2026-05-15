@@ -241,6 +241,7 @@ export function RepoCard({
             <button
               onClick={(e) => openFirst(authoredPrs, e)}
               title={`Your open PRs:\n${prTooltip(authoredPrs)}`}
+              aria-label={`${authoredPrs.length} open pull request${authoredPrs.length === 1 ? "" : "s"} you authored`}
               className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25"
             >
               PR {authoredPrs.length}
@@ -250,6 +251,7 @@ export function RepoCard({
             <button
               onClick={(e) => openFirst(reviewPrs, e)}
               title={`Awaiting your review:\n${prTooltip(reviewPrs)}`}
+              aria-label={`${reviewPrs.length} pull request${reviewPrs.length === 1 ? "" : "s"} awaiting your review`}
               className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25"
             >
               RR {reviewPrs.length}
