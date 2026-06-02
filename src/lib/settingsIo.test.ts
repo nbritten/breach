@@ -12,6 +12,7 @@ const validPayload: SettingsExport = {
     serviceUrlTemplate: "https://{name}.example.com",
     serviceRepos: ["foo"],
     terminalApp: "Ghostty",
+    checkForUpdates: true,
   },
 };
 
@@ -75,5 +76,20 @@ describe("parseImport", () => {
       settings: { ...validPayload.settings, terminalApp: 42 },
     };
     expect(() => parseImport(JSON.stringify(bad))).toThrow(/terminalApp/);
+  });
+
+  it("treats a missing checkForUpdates as true (older exports stay importable)", () => {
+    const { checkForUpdates: _c, ...withoutFlag } = validPayload.settings;
+    const old = { ...validPayload, settings: withoutFlag };
+    const parsed = parseImport(JSON.stringify(old));
+    expect(parsed.settings.checkForUpdates).toBe(true);
+  });
+
+  it("rejects a non-boolean checkForUpdates", () => {
+    const bad = {
+      ...validPayload,
+      settings: { ...validPayload.settings, checkForUpdates: "yes" },
+    };
+    expect(() => parseImport(JSON.stringify(bad))).toThrow(/checkForUpdates/);
   });
 });

@@ -2,6 +2,7 @@ import { api } from "./api";
 import {
   FALLBACK_DEFAULT_BRANCH,
   getBranchOverrides,
+  getCheckForUpdates,
   getDefaultBranch,
   getPinnedRepos,
   getRepoOrgs,
@@ -10,6 +11,7 @@ import {
   getServiceUrlTemplate,
   getTerminalApp,
   setBranchOverrides,
+  setCheckForUpdates,
   setDefaultBranch,
   setPinnedRepos,
   setRepoOrgs,
@@ -32,6 +34,7 @@ export interface SettingsExport {
     serviceUrlTemplate: string;
     serviceRepos: string[];
     terminalApp: string;
+    checkForUpdates: boolean;
   };
 }
 
@@ -47,6 +50,7 @@ export async function buildExport(): Promise<SettingsExport> {
     serviceUrlTemplate,
     serviceRepos,
     terminalApp,
+    checkForUpdates,
   ] = await Promise.all([
     getReposPath(),
     getDefaultBranch(),
@@ -56,6 +60,7 @@ export async function buildExport(): Promise<SettingsExport> {
     getServiceUrlTemplate(),
     getServiceRepos(),
     getTerminalApp(),
+    getCheckForUpdates(),
   ]);
   return {
     version: SETTINGS_VERSION,
@@ -68,6 +73,7 @@ export async function buildExport(): Promise<SettingsExport> {
       serviceUrlTemplate,
       serviceRepos,
       terminalApp,
+      checkForUpdates,
     },
   };
 }
@@ -136,6 +142,9 @@ export function parseImport(text: string): SettingsExport {
   if (s.terminalApp !== undefined && typeof s.terminalApp !== "string") {
     throw new Error("`terminalApp` must be a string");
   }
+  if (s.checkForUpdates !== undefined && typeof s.checkForUpdates !== "boolean") {
+    throw new Error("`checkForUpdates` must be a boolean");
+  }
 
   return {
     version: data.version,
@@ -148,6 +157,8 @@ export function parseImport(text: string): SettingsExport {
       serviceUrlTemplate: s.serviceUrlTemplate,
       serviceRepos: s.serviceRepos,
       terminalApp: typeof s.terminalApp === "string" ? s.terminalApp : "",
+      checkForUpdates:
+        typeof s.checkForUpdates === "boolean" ? s.checkForUpdates : true,
     },
   };
 }
@@ -163,6 +174,7 @@ export async function applyImport(payload: SettingsExport): Promise<void> {
     setServiceUrlTemplate(s.serviceUrlTemplate),
     setServiceRepos(s.serviceRepos),
     setTerminalApp(s.terminalApp),
+    setCheckForUpdates(s.checkForUpdates),
   ]);
 }
 
@@ -187,6 +199,7 @@ function normalizeSettings(
     serviceUrlTemplate: s.serviceUrlTemplate.trim(),
     serviceRepos: s.serviceRepos.map((x) => x.trim()).filter((x) => x.length > 0),
     terminalApp: s.terminalApp.trim(),
+    checkForUpdates: s.checkForUpdates,
   };
 }
 
