@@ -36,9 +36,8 @@ import {
 } from "../lib/settingsIo";
 import {
   checkForUpdate,
+  dispatchUpdateRefresh,
   getSkippedVersion,
-  shouldNotifyAboutUpdate,
-  UPDATE_REFRESH_EVENT,
 } from "../lib/updates";
 
 type Row = { id: number; name: string; branch: string };
@@ -173,13 +172,13 @@ export function Settings() {
         checkForUpdate(),
         getSkippedVersion(),
       ]);
-      window.dispatchEvent(new Event(UPDATE_REFRESH_EVENT));
-      if (shouldNotifyAboutUpdate(update, skipped)) {
-        showToast(`Update available: ${update?.version}`, "info");
-      } else if (update && skipped === update.version) {
+      dispatchUpdateRefresh({ update, skippedVersion: skipped });
+      if (update === null) {
+        showToast("You're up to date.", "info");
+      } else if (skipped === update.version) {
         showToast(`Update ${update.version} is available but skipped.`, "info");
       } else {
-        showToast("You're up to date.", "info");
+        showToast(`Update available: ${update.version}`, "info");
       }
     } catch (e) {
       showError(e);

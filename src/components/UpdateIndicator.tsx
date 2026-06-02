@@ -11,6 +11,7 @@ import {
   shouldNotifyAboutUpdate,
   shouldRecheck,
   UPDATE_REFRESH_EVENT,
+  type UpdateRefreshDetail,
 } from "../lib/updates";
 
 const RELEASE_URL = "https://github.com/nbritten/breach/releases/tag/v";
@@ -52,10 +53,16 @@ export function UpdateIndicator() {
       await refresh();
     };
 
-    // Manual checks from the Settings page broadcast this event so the
-    // indicator picks up the result without us threading state.
-    const onManualRefresh = () => {
-      refresh();
+    // Manual checks from the Settings page already ran the network call;
+    // we just adopt the result here so we don't fire a second one.
+    const onManualRefresh = (e: Event) => {
+      const detail = (e as CustomEvent<UpdateRefreshDetail>).detail;
+      if (cancelled || !detail) return;
+      setUpdate(
+        shouldNotifyAboutUpdate(detail.update, detail.skippedVersion)
+          ? detail.update
+          : null,
+      );
     };
 
     window.addEventListener("focus", onFocus);

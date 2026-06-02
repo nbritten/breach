@@ -9,9 +9,21 @@ const LAST_CHECKED_AT_KEY = "updateLastCheckedAt";
 
 const RECHECK_THROTTLE_MS = 4 * 60 * 60 * 1000; // 4 hours
 
-// Dispatched on `window` after a manual or focus-driven check, so the indicator
-// in the titlebar can re-fetch its state without us needing a shared store.
+// Dispatched on `window` when a check fires outside the indicator (currently:
+// the Settings "Check now" button), so the titlebar indicator can update its
+// dot without re-running the check itself.
 export const UPDATE_REFRESH_EVENT = "breach:update-refresh";
+
+export interface UpdateRefreshDetail {
+  update: Update | null;
+  skippedVersion: string | null;
+}
+
+export function dispatchUpdateRefresh(detail: UpdateRefreshDetail): void {
+  window.dispatchEvent(
+    new CustomEvent<UpdateRefreshDetail>(UPDATE_REFRESH_EVENT, { detail }),
+  );
+}
 
 export async function getSkippedVersion(): Promise<string | null> {
   return (await store.get<string>(SKIPPED_VERSION_KEY)) ?? null;
