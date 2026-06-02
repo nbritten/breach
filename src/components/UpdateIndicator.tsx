@@ -80,7 +80,7 @@ export function UpdateIndicator() {
         className="block w-2.5 h-2.5 rounded-full bg-emerald-400 hover:bg-emerald-300 transition-colors"
       />
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-56 rounded-md border border-neutral-800 bg-neutral-900 shadow-lg py-1 z-50">
+        <div className="absolute left-0 top-full mt-2 w-56 rounded-md border border-neutral-800 bg-neutral-900 shadow-lg py-1 z-50">
           <div className="px-3 py-1.5 text-xs text-neutral-400 border-b border-neutral-800 mb-1">
             Update available: {update.version}
           </div>
