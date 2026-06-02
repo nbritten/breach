@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use notify::{RecommendedWatcher, RecursiveMode};
-use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
+use notify::{Config, RecommendedWatcher, RecursiveMode};
+use notify_debouncer_full::{new_debouncer_opt, DebounceEventResult, Debouncer, NoCache};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
@@ -14,9 +14,13 @@ use super::expand;
 /// keeps the watcher running; replacing it stops the previous one (the spawned
 /// dispatch task ends on its own once its channel closes).
 ///
-/// `RecommendedCache` differs by platform (FileIdMap on macOS, NoCache on
-/// Linux), so we lean on the alias rather than hardcoding either.
-type AppDebouncer = Debouncer<RecommendedWatcher, RecommendedCache>;
+/// We opt out of the debouncer's file-id cache (`NoCache`) on every platform.
+/// The default `RecommendedCache` is a `FileIdMap` on macOS that does
+/// O(cache_size) work in `remove_path` on every delete event, which pegs the
+/// CPU when the watched tree contains a directory with high churn (node_modules
+/// rebuilds, IDE indexers, .git pack compaction). We only emit per-repo
+/// "something changed" events, so the cache's rename-detection isn't worth it.
+type AppDebouncer = Debouncer<RecommendedWatcher, NoCache>;
 
 #[derive(Default)]
 pub struct WatcherState {
@@ -68,7 +72,7 @@ pub fn start_repos_watcher(
     }
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<DebounceEventResult>();
-    let mut debouncer = new_debouncer(
+    let mut debouncer = new_debouncer_opt::<_, RecommendedWatcher, NoCache>(
         Duration::from_millis(DEBOUNCE_MS),
         None,
         move |result: DebounceEventResult| {
@@ -76,6 +80,8 @@ pub fn start_repos_watcher(
             // means we're being torn down — nothing useful to do.
             let _ = tx.send(result);
         },
+        NoCache::new(),
+        Config::default(),
     )
     .map_err(|e| format!("create watcher: {e}"))?;
 
