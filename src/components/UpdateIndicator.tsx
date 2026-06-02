@@ -4,10 +4,13 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { getCheckForUpdates } from "../lib/settings";
 import {
   checkForUpdate,
+  getLastCheckedAt,
   getSkippedVersion,
   installAndRelaunch,
   setSkippedVersion,
   shouldNotifyAboutUpdate,
+  shouldRecheck,
+  UPDATE_REFRESH_EVENT,
 } from "../lib/updates";
 
 const RELEASE_URL = "https://github.com/nbritten/breach/releases/tag/v";
@@ -20,18 +23,47 @@ export function UpdateIndicator() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const enabled = await getCheckForUpdates();
-      if (!enabled || cancelled) return;
+
+    const refresh = async () => {
       const [result, skipped] = await Promise.all([
         checkForUpdate(),
         getSkippedVersion(),
       ]);
       if (cancelled) return;
-      if (shouldNotifyAboutUpdate(result, skipped)) setUpdate(result);
-    })();
+      setUpdate(shouldNotifyAboutUpdate(result, skipped) ? result : null);
+    };
+
+    const refreshIfEnabled = async () => {
+      const enabled = await getCheckForUpdates();
+      if (!enabled || cancelled) return;
+      await refresh();
+    };
+
+    // On launch: always check (subject to the user's enabled toggle).
+    refreshIfEnabled();
+
+    // On window focus: re-check, but only if the throttle window has elapsed
+    // since the last check — switching apps shouldn't pile up requests.
+    const onFocus = async () => {
+      const enabled = await getCheckForUpdates();
+      if (!enabled || cancelled) return;
+      const lastAt = await getLastCheckedAt();
+      if (!shouldRecheck(lastAt, Date.now())) return;
+      await refresh();
+    };
+
+    // Manual checks from the Settings page broadcast this event so the
+    // indicator picks up the result without us threading state.
+    const onManualRefresh = () => {
+      refresh();
+    };
+
+    window.addEventListener("focus", onFocus);
+    window.addEventListener(UPDATE_REFRESH_EVENT, onManualRefresh);
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener(UPDATE_REFRESH_EVENT, onManualRefresh);
     };
   }, []);
 

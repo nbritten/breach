@@ -34,6 +34,12 @@ import {
   parseImport,
   pickJsonFile,
 } from "../lib/settingsIo";
+import {
+  checkForUpdate,
+  getSkippedVersion,
+  shouldNotifyAboutUpdate,
+  UPDATE_REFRESH_EVENT,
+} from "../lib/updates";
 
 type Row = { id: number; name: string; branch: string };
 type OrgRow = { id: number; org: string };
@@ -63,7 +69,8 @@ export function Settings() {
   const [saved, setSaved] = useState(false);
   const [imported, setImported] = useState(false);
   const { show: showOnboarding } = useOnboarding();
-  const { showError } = useToast();
+  const { show: showToast, showError } = useToast();
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -157,6 +164,29 @@ export function Settings() {
   const removePinRow = (id: number) =>
     setPins((ps) => ps.filter((p) => p.id !== id));
   const addPinRow = () => setPins((ps) => [...ps, newPinRow()]);
+
+  const checkUpdatesNow = async () => {
+    if (checkingUpdate) return;
+    setCheckingUpdate(true);
+    try {
+      const [update, skipped] = await Promise.all([
+        checkForUpdate(),
+        getSkippedVersion(),
+      ]);
+      window.dispatchEvent(new Event(UPDATE_REFRESH_EVENT));
+      if (shouldNotifyAboutUpdate(update, skipped)) {
+        showToast(`Update available: ${update?.version}`, "info");
+      } else if (update && skipped === update.version) {
+        showToast(`Update ${update.version} is available but skipped.`, "info");
+      } else {
+        showToast("You're up to date.", "info");
+      }
+    } catch (e) {
+      showError(e);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   const onExport = async () => {
     try {
@@ -295,12 +325,22 @@ export function Settings() {
                 Check for updates on launch
               </span>
               <span className="block text-xs text-neutral-500 mt-0.5">
-                When a new release is available, Breach shows a small green
-                dot next to the title. Click it to install, view release notes,
-                or skip the version.
+                Also re-checks when you switch back to Breach after being away
+                for a few hours. When a new release is available, a small green
+                dot appears next to the title.
               </span>
             </span>
           </label>
+          <div className="mt-2 pl-6">
+            <button
+              type="button"
+              onClick={checkUpdatesNow}
+              disabled={checkingUpdate}
+              className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {checkingUpdate ? "Checking…" : "Check now"}
+            </button>
+          </div>
         </section>
 
         <SettingsSection
