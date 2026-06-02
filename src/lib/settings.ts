@@ -16,6 +16,7 @@ const SERVICE_URL_TEMPLATE_KEY = "serviceUrlTemplate";
 const SERVICE_REPOS_KEY = "serviceRepos";
 const TERMINAL_APP_KEY = "terminalApp";
 const CHECK_FOR_UPDATES_KEY = "checkForUpdates";
+const DEMO_MODE_KEY = "demoMode";
 
 export const FALLBACK_DEFAULT_BRANCH = "main";
 
@@ -97,6 +98,17 @@ export async function getCheckForUpdates(): Promise<boolean> {
 
 export async function setCheckForUpdates(enabled: boolean): Promise<void> {
   await store.set(CHECK_FOR_UPDATES_KEY, enabled);
+  await store.save();
+}
+
+// Intentionally not exported via settingsIo: demoMode is a local UI toggle, not
+// something to round-trip through Export / Import.
+export async function getDemoMode(): Promise<boolean> {
+  return (await store.get<boolean>(DEMO_MODE_KEY)) ?? false;
+}
+
+export async function setDemoMode(enabled: boolean): Promise<void> {
+  await store.set(DEMO_MODE_KEY, enabled);
   await store.save();
 }
 
