@@ -1,6 +1,6 @@
 [package]
 name = "breach"
-version = "0.5.5"
+version = "0.5.6"
 description = "A macOS dashboard for every local git repo."
 authors = ["natbritten"]
 edition = "2021"
