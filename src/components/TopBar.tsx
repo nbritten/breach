@@ -1,6 +1,7 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSearch } from "../lib/search";
+import { UpdateIndicator } from "./UpdateIndicator";
 import logo from "../assets/logo.png";
 
 export function TopBar() {
@@ -64,6 +65,10 @@ export function TopBar() {
         <span className="font-semibold tracking-tight text-[15px]">
           Breach
         </span>
+      </div>
+
+      <div className="ml-2 flex items-center">
+        <UpdateIndicator />
       </div>
 
       <div data-tauri-drag-region style={drag} className="flex-1" />

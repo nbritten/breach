@@ -5,6 +5,7 @@ import { useOnboarding } from "../lib/onboarding";
 import {
   FALLBACK_DEFAULT_BRANCH,
   getBranchOverrides,
+  getCheckForUpdates,
   getDefaultBranch,
   getPinnedRepos,
   getRepoOrgs,
@@ -13,6 +14,7 @@ import {
   getServiceUrlTemplate,
   getTerminalApp,
   setBranchOverrides,
+  setCheckForUpdates,
   setDefaultBranch,
   setPinnedRepos,
   setRepoOrgs,
@@ -57,6 +59,7 @@ export function Settings() {
   const [services, setServices] = useState<ServiceRow[]>([]);
   const [terminalApp, setTerminalAppState] = useState("");
   const [terminalSuggestions, setTerminalSuggestions] = useState<string[]>([]);
+  const [checkUpdates, setCheckUpdates] = useState(true);
   const [saved, setSaved] = useState(false);
   const [imported, setImported] = useState(false);
   const { show: showOnboarding } = useOnboarding();
@@ -65,7 +68,7 @@ export function Settings() {
   useEffect(() => {
     (async () => {
       try {
-        const [p, f, overrides, orgList, pinList, tpl, serviceList, term] =
+        const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk] =
           await Promise.all([
             getReposPath(),
             getDefaultBranch(),
@@ -75,6 +78,7 @@ export function Settings() {
             getServiceUrlTemplate(),
             getServiceRepos(),
             getTerminalApp(),
+            getCheckForUpdates(),
           ]);
         setPath(p);
         setFallback(f);
@@ -85,6 +89,7 @@ export function Settings() {
         setServiceTpl(tpl);
         setServices(serviceList.map((n) => newServiceRow(n)));
         setTerminalAppState(term);
+        setCheckUpdates(chk);
       } catch (e) {
         showError(e);
       }
@@ -119,6 +124,7 @@ export function Settings() {
         setServiceUrlTemplate(serviceTpl.trim()),
         setServiceRepos(serviceList),
         setTerminalApp(terminalApp.trim()),
+        setCheckForUpdates(checkUpdates),
       ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
@@ -173,7 +179,7 @@ export function Settings() {
       const payload = parseImport(text);
       await applyImport(payload);
       // Reload visible state from store so the form reflects what was just imported.
-      const [p, f, overrides, orgList, pinList, tpl, serviceList, term] =
+      const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk] =
         await Promise.all([
           getReposPath(),
           getDefaultBranch(),
@@ -183,6 +189,7 @@ export function Settings() {
           getServiceUrlTemplate(),
           getServiceRepos(),
           getTerminalApp(),
+          getCheckForUpdates(),
         ]);
       setPath(p);
       setFallback(f);
@@ -193,6 +200,7 @@ export function Settings() {
       setServiceTpl(tpl);
       setServices(serviceList.map((n) => newServiceRow(n)));
       setTerminalAppState(term);
+      setCheckUpdates(chk);
       setImported(true);
       setTimeout(() => setImported(false), 1500);
     } catch (e) {
@@ -272,6 +280,27 @@ export function Settings() {
               <option key={t} value={t} />
             ))}
           </datalist>
+        </section>
+
+        <section className="mb-8">
+          <label className="flex items-start gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={checkUpdates}
+              onChange={(e) => setCheckUpdates(e.currentTarget.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-medium">
+                Check for updates on launch
+              </span>
+              <span className="block text-xs text-neutral-500 mt-0.5">
+                When a new release is available, Breach shows a small green
+                dot next to the title. Click it to install, view release notes,
+                or skip the version.
+              </span>
+            </span>
+          </label>
         </section>
 
         <SettingsSection

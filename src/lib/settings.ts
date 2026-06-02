@@ -15,6 +15,7 @@ const ONBOARDED_KEY = "onboarded";
 const SERVICE_URL_TEMPLATE_KEY = "serviceUrlTemplate";
 const SERVICE_REPOS_KEY = "serviceRepos";
 const TERMINAL_APP_KEY = "terminalApp";
+const CHECK_FOR_UPDATES_KEY = "checkForUpdates";
 
 export const FALLBACK_DEFAULT_BRANCH = "main";
 
@@ -87,6 +88,15 @@ export async function getTerminalApp(): Promise<string> {
 
 export async function setTerminalApp(app: string): Promise<void> {
   await store.set(TERMINAL_APP_KEY, app);
+  await store.save();
+}
+
+export async function getCheckForUpdates(): Promise<boolean> {
+  return (await store.get<boolean>(CHECK_FOR_UPDATES_KEY)) ?? true;
+}
+
+export async function setCheckForUpdates(enabled: boolean): Promise<void> {
+  await store.set(CHECK_FOR_UPDATES_KEY, enabled);
   await store.save();
 }
 
