@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api } from "../lib/api";
+import { api, isDemoModeActive } from "../lib/api";
 import {
   buildServiceUrl,
-  getPinnedRepos,
+  getEffectivePinnedRepos,
   getRepoOrgs,
   getReposPath,
   getServiceRepos,
@@ -44,6 +44,10 @@ export function Dashboard() {
 
   const togglePin = useCallback(
     async (name: string) => {
+      // In demo mode the pinned list is a hardcoded fixture; persisting a
+      // toggle here would leak demo names into the user's real settings and
+      // break the dashboard once they turn demo off.
+      if (isDemoModeActive()) return;
       const next = pinnedOrder.includes(name)
         ? pinnedOrder.filter((n) => n !== name)
         : [...pinnedOrder, name];
@@ -75,7 +79,7 @@ export function Dashboard() {
       setPath(path);
       const [list, pinned, nextOrgs, tpl, services] = await Promise.all([
         api.listRepos(path),
-        getPinnedRepos(),
+        getEffectivePinnedRepos(),
         getRepoOrgs(),
         getServiceUrlTemplate(),
         getServiceRepos(),

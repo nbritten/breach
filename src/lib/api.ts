@@ -22,6 +22,10 @@ export function setDemoModeActive(active: boolean): void {
   demoActive = active;
 }
 
+export function isDemoModeActive(): boolean {
+  return demoActive;
+}
+
 const real = {
   listRepos: (reposPath: string) =>
     invoke<RepoSummary[]>("list_repos", { reposPath }),

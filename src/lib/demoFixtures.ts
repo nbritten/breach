@@ -276,13 +276,145 @@ export function demoSyncAll(reposToSync: string[]): SyncResult[] {
     }));
 }
 
+// 110 fake microservices generated below. These give the dashboard the visual
+// density of a real engineering org — pinned hand-crafted repos at the top,
+// long-tail microservices below.
+const MICROSERVICE_PREFIXES = [
+  "payments",
+  "billing",
+  "notifications",
+  "auth",
+  "data",
+  "events",
+  "infra",
+  "analytics",
+  "ml",
+  "search",
+  "media",
+  "checkout",
+  "ledger",
+  "audit",
+  "internal-tools",
+  "growth",
+];
+const MICROSERVICE_SUFFIXES = [
+  "worker",
+  "service",
+  "router",
+  "bridge",
+  "handler",
+  "ingester",
+  "exporter",
+  "cron",
+  "consumer",
+  "api",
+  "gateway",
+  "scheduler",
+  "syncer",
+  "rotator",
+  "indexer",
+  "reporter",
+];
+const MICROSERVICE_QUALIFIERS = [
+  "stripe",
+  "internal",
+  "v2",
+  "legacy",
+  "edge",
+  "core",
+  "shadow",
+  "mobile",
+  "web",
+  "kafka",
+  "redis",
+  "s3",
+  "sqs",
+  "grpc",
+  "ws",
+];
+
+// A fixed list of authors for last-commit messages on the microservices, so
+// the dashboard looks populated by humans rather than a single committer.
+const AUTHORS = [
+  "Priya Shah",
+  "Jordan Reyes",
+  "Sam Okafor",
+  "Mei Chen",
+  "Devon Park",
+  "Avery Lin",
+  "Ren Nakamura",
+  "Yusuf Hassan",
+  "Camille Petit",
+  "Theo Larsen",
+];
+
+// Deterministic so the demo looks identical run-to-run. Mulberry32 is plenty
+// for picking from short lists.
+function mulberry32(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function generateMicroservices(count: number): DemoRepo[] {
+  const rand = mulberry32(0xb12a4c11);
+  const pick = <T>(arr: T[]) => arr[Math.floor(rand() * arr.length)];
+  const seen = new Set<string>();
+  const repos: DemoRepo[] = [];
+  let attempts = 0;
+  while (repos.length < count && attempts < count * 10) {
+    attempts++;
+    const prefix = pick(MICROSERVICE_PREFIXES);
+    const qualifier = rand() < 0.45 ? `-${pick(MICROSERVICE_QUALIFIERS)}` : "";
+    const suffix = pick(MICROSERVICE_SUFFIXES);
+    const name = `${prefix}${qualifier}-${suffix}`;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    repos.push({
+      name,
+      branch: "main",
+      dirty: rand() < 0.04,
+      ahead: 0,
+      behind: 0,
+      hasUpstream: true,
+      commitSubject: pick([
+        "Bump dependency",
+        "Add metric for retry budget",
+        "Lift config into env",
+        "Drop dead feature flag",
+        "Tighten timeout on outbound calls",
+        "Backfill nullable column",
+        "Switch logger to structured output",
+        "Cache hot path in process",
+        "Smaller batch size in producer",
+        "Rename internal helper",
+      ]),
+      commitAuthor: pick(AUTHORS),
+      commitAgoMinutes: Math.floor(rand() * 60 * 24 * 30) + 30, // 30min — 30 days
+    });
+  }
+  return repos;
+}
+
+const MICROSERVICES: DemoRepo[] = generateMicroservices(110);
+const ALL_REPOS: DemoRepo[] = [...REPOS, ...MICROSERVICES];
+
+// Names of the repos that should appear in the "Pinned" section in demo mode.
+// These are the hand-curated 10 — the microservices fill the long tail below.
+export const DEMO_PINNED_REPOS: string[] = REPOS.map((r) => r.name);
+
 // Mutated by demoApplySync so a refresh after sync reflects the new state
 // (the `behind` repo goes to up-to-date). Reset on demoReset (called when the
 // toggle is turned off, so the next demo session starts fresh).
 let mutableState: DemoRepo[] | null = null;
 
 function demoCurrentRepos(): DemoRepo[] {
-  return mutableState ?? REPOS;
+  return mutableState ?? ALL_REPOS;
 }
 
 export function demoApplySync(): void {

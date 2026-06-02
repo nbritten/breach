@@ -1,5 +1,6 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
-import { api } from "./api";
+import { api, isDemoModeActive } from "./api";
+import { DEMO_PINNED_REPOS } from "./demoFixtures";
 
 // Adding a new setting key? Also update src/lib/settingsIo.ts
 // (SettingsExport, buildExport, parseImport, applyImport) so it round-trips
@@ -63,6 +64,14 @@ export async function setRepoOrgs(list: string[]): Promise<void> {
 
 export async function getPinnedRepos(): Promise<string[]> {
   return (await store.get<string[]>(PINNED_REPOS_KEY)) ?? [];
+}
+
+// Demo mode pins the curated 10 repos at the top regardless of the user's real
+// `pinnedRepos` setting, so the dashboard layout looks intentional. The real
+// pinnedRepos is untouched — toggle demo off and the user's pins come back.
+export async function getEffectivePinnedRepos(): Promise<string[]> {
+  if (isDemoModeActive()) return DEMO_PINNED_REPOS;
+  return getPinnedRepos();
 }
 
 export async function getServiceUrlTemplate(): Promise<string> {
