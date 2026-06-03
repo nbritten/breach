@@ -14,6 +14,11 @@ export interface AgentInfo {
   // 24x24 viewBox by convention; callers can scale down.
 }
 
+// The set of providers here must match `AGENT_PROCESS_NAMES` in
+// `src-tauri/src/commands/agents.rs`. Drift between the two would manifest
+// as either an icon-less indicator (backend detects something the frontend
+// can't render) or a dead chip (frontend offers a filter the backend never
+// populates). Adding a provider requires touching both files.
 export const AGENT_PROVIDER_ORDER: AgentProvider[] = ["claude", "codex"];
 
 export const AGENT_INFO: Record<AgentProvider, AgentInfo> = {

@@ -164,10 +164,22 @@ export function useActiveAgentSessionsPoll(
       }
     };
 
+    // Immediate fetch so badges show up at mount, not `intervalMs` later.
+    void tick();
+
     const id = window.setInterval(tick, intervalMs);
+
+    // Re-tick when the window becomes visible again so badges update on
+    // refocus instead of waiting up to `intervalMs` for the next interval.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
     return () => {
       cancelled = true;
       window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [enabled, intervalMs]);
 }
