@@ -3,7 +3,13 @@ import { Link } from "react-router-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { openTerminal } from "../lib/settings";
 import { useToast } from "../lib/toast";
-import type { CiStatus, PrInfo, RepoSummary } from "../types";
+import type {
+  AgentProvider,
+  CiStatus,
+  PrInfo,
+  RepoSummary,
+} from "../types";
+import { AGENT_INFO, AGENT_PROVIDER_ORDER } from "../lib/agents";
 
 function relTime(ts: number): string {
   const now = Date.now() / 1000;
@@ -24,6 +30,7 @@ interface Props {
   pinned?: boolean;
   onTogglePin?: (name: string) => void;
   ci?: CiStatus;
+  activeAgents?: ReadonlySet<AgentProvider>;
   docsUrl?: string | null;
 }
 
@@ -51,6 +58,7 @@ export function RepoCard({
   pinned = false,
   onTogglePin,
   ci,
+  activeAgents,
   docsUrl,
 }: Props) {
   const slug = encodeURIComponent(repo.path);
@@ -110,6 +118,31 @@ export function RepoCard({
               } ${CI_DOT[ci.state].pulse ? "animate-pulse" : ""}`}
             />
           )}
+          {activeAgents &&
+            AGENT_PROVIDER_ORDER.filter((p) => activeAgents.has(p)).map(
+              (provider) => {
+                const info = AGENT_INFO[provider];
+                return (
+                  <span
+                    key={provider}
+                    title={`Active ${info.label} session`}
+                    aria-label={`Active ${info.label} session`}
+                    className="shrink-0"
+                    style={{ color: info.iconColor }}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path d={info.iconPath} />
+                    </svg>
+                  </span>
+                );
+              },
+            )}
           <h3 className="font-semibold truncate">{repo.name}</h3>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AgentSession,
   CiStatus,
   CloneResult,
   CommitInfo,
@@ -67,6 +68,8 @@ const real = {
     invoke<NotificationPoll>("pr_notifications_changed", { lastModified }),
   listCiStatus: (repos: { path: string; branch: string }[]) =>
     invoke<Record<string, CiStatus>>("list_ci_status", { repos }),
+  listActiveAgentSessions: (repoPaths: string[]) =>
+    invoke<AgentSession[]>("list_active_agent_sessions", { repoPaths }),
   openInTerminal: (repoPath: string, app: string) =>
     invoke<string>("open_in_terminal", { repoPath, app }),
   listTerminalApps: () => invoke<string[]>("list_terminal_apps"),

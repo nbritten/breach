@@ -1,4 +1,5 @@
 import type {
+  AgentSession,
   CiStatus,
   CloneResult,
   CommitInfo,
@@ -77,6 +78,20 @@ export const demoApi = {
   ): Promise<Record<string, CiStatus>> => {
     await sleep(60);
     return demoCiStatus(repos);
+  },
+  listActiveAgentSessions: async (
+    _repoPaths: string[],
+  ): Promise<AgentSession[]> => {
+    await sleep(40);
+    // Hand-picked: a couple of the curated 10 always look "in active use"
+    // during a demo recording so the indicators have a story to tell. The
+    // mix shows what multi-agent monitoring will look like at a glance.
+    return [
+      { provider: "claude", repo_path: "/Users/demo/repos/northstar-api" },
+      { provider: "claude", repo_path: "/Users/demo/repos/ml-pipeline" },
+      { provider: "codex", repo_path: "/Users/demo/repos/billing-service" },
+      { provider: "codex", repo_path: "/Users/demo/repos/customer-portal" },
+    ];
   },
   openInTerminal: async (_repoPath: string, _app: string): Promise<string> =>
     "Terminal",

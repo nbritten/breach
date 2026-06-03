@@ -54,6 +54,13 @@ export interface DirtyFile {
   work_status: string;
 }
 
+export type AgentProvider = "claude" | "codex";
+
+export interface AgentSession {
+  provider: AgentProvider;
+  repo_path: string;
+}
+
 export interface RepoSummary {
   name: string;
   path: string;

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { api } from "./api";
-import type { CiStatus } from "../types";
+import type { AgentSession, CiStatus } from "../types";
 
 /**
  * Listen for the Escape key and fire `onEscape`. Set `enabled` to false to skip
@@ -126,6 +126,60 @@ export function useCiStatusPoll(
     return () => {
       cancelled = true;
       window.clearInterval(id);
+    };
+  }, [enabled, intervalMs]);
+}
+
+/**
+ * Periodic poll of which repos have an active coding-agent CLI session
+ * (Claude, Codex, etc.) right now. Ticks while the window is visible, skips
+ * when no repos are configured, swallows errors. Detection is a cheap
+ * `ps + lsof` shell-out so a tight cadence is fine.
+ */
+export function useActiveAgentSessionsPoll(
+  enabled: boolean,
+  intervalMs: number,
+  request: () => string[],
+  onUpdate: (sessions: AgentSession[]) => void,
+) {
+  const requestRef = useRef(request);
+  requestRef.current = request;
+  const onUpdateRef = useRef(onUpdate);
+  onUpdateRef.current = onUpdate;
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+
+    const tick = async () => {
+      if (document.visibilityState !== "visible") return;
+      const paths = requestRef.current();
+      if (paths.length === 0) return;
+      try {
+        const result = await api.listActiveAgentSessions(paths);
+        if (cancelled) return;
+        onUpdateRef.current(result);
+      } catch (err) {
+        console.warn("Agent session poll failed", err);
+      }
+    };
+
+    // Immediate fetch so badges show up at mount, not `intervalMs` later.
+    void tick();
+
+    const id = window.setInterval(tick, intervalMs);
+
+    // Re-tick when the window becomes visible again so badges update on
+    // refocus instead of waiting up to `intervalMs` for the next interval.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [enabled, intervalMs]);
 }

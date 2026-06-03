@@ -14,20 +14,32 @@ import {
 import { useSearch } from "../lib/search";
 import { useToast } from "../lib/toast";
 import { errorText } from "../lib/errors";
-import { useCiStatusPoll, usePrNotificationsPoll } from "../lib/hooks";
+import {
+  useActiveAgentSessionsPoll,
+  useCiStatusPoll,
+  usePrNotificationsPoll,
+} from "../lib/hooks";
+import { agentsByRepo } from "../lib/agents";
 
 import { RepoCard } from "../components/RepoCard";
 import { SyncAllModal } from "../components/SyncAllModal";
 import { CloneMissingModal } from "../components/CloneMissingModal";
 import { EmptyState } from "../components/EmptyState";
 import { Tooltip } from "../components/Tooltip";
-import type { CiStatus, MyPrs, PrInfo, RepoSummary } from "../types";
+import type {
+  AgentProvider,
+  AgentSession,
+  CiStatus,
+  MyPrs,
+  PrInfo,
+  RepoSummary,
+} from "../types";
 import {
   filterByChips,
   filterRepos,
   groupRepos,
-  REPO_FILTER_LABELS,
   REPO_FILTER_ORDER,
+  repoFilterLabel,
   repoFilterCounts,
   type RepoFilter,
 } from "../lib/dashboard";
@@ -45,6 +57,10 @@ export function Dashboard() {
   const [orgs, setOrgs] = useState<string[]>([]);
   const [prs, setPrs] = useState<MyPrs>({ authored: {}, review_requested: {}, errors: {} });
   const [ciByPath, setCiByPath] = useState<Record<string, CiStatus>>({});
+  const [agentSessions, setAgentSessions] = useState<AgentSession[]>([]);
+  const agentsByPath = useMemo<
+    Record<string, Set<AgentProvider>>
+  >(() => agentsByRepo(agentSessions), [agentSessions]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [serviceTpl, setServiceTpl] = useState("");
   const [serviceSet, setServiceSet] = useState<Set<string>>(new Set());
@@ -134,6 +150,15 @@ export function Dashboard() {
     (result) => setCiByPath((prev) => ({ ...prev, ...result })),
   );
 
+  // Agent session detection is a cheap local `ps + lsof` check, so a
+  // tighter cadence than CI is fine. 15s feels live without being noisy.
+  useActiveAgentSessionsPoll(
+    repos.length > 0,
+    15_000,
+    () => repos.map((r) => r.path),
+    setAgentSessions,
+  );
+
   // Single-repo refresh is best-effort: if the repo was deleted between the
   // watcher event and our refetch, repoSummary errors out — fall back to a
   // full re-list so the deleted card is removed instead of going stale.
@@ -220,13 +245,14 @@ export function Dashboard() {
   );
 
   const filterCounts = useMemo(
-    () => repoFilterCounts(searchFiltered, prs, ciByPath),
-    [searchFiltered, prs, ciByPath],
+    () => repoFilterCounts(searchFiltered, prs, ciByPath, agentsByPath),
+    [searchFiltered, prs, ciByPath, agentsByPath],
   );
 
   const filteredRepos = useMemo(
-    () => filterByChips(searchFiltered, activeFilters, prs, ciByPath),
-    [searchFiltered, activeFilters, prs, ciByPath],
+    () =>
+      filterByChips(searchFiltered, activeFilters, prs, ciByPath, agentsByPath),
+    [searchFiltered, activeFilters, prs, ciByPath, agentsByPath],
   );
 
   const sections = useMemo(
@@ -349,7 +375,7 @@ export function Dashboard() {
                         : "bg-neutral-800/60 border-neutral-700 text-neutral-300 hover:bg-neutral-800"
                     }`}
                   >
-                    {REPO_FILTER_LABELS[f]}{" "}
+                    {repoFilterLabel(f)}{" "}
                     <span className="opacity-60">{count}</span>
                   </button>
                 );
@@ -425,6 +451,7 @@ export function Dashboard() {
                           pinned={pinnedOrder.includes(r.name)}
                           onTogglePin={togglePin}
                           ci={ciByPath[r.path]}
+                          activeAgents={agentsByPath[r.path]}
                           docsUrl={
                             serviceSet.has(r.name)
                               ? buildServiceUrl(serviceTpl, r.name)
