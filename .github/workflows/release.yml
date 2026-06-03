@@ -76,3 +76,13 @@ jobs:
           # The DMG roughly doubles in size (~10 MB → ~20 MB), but one
           # download serves both architectures.
           args: --target universal-apple-darwin
+
+      # After a successful release, ping the Vercel deploy hook so the
+      # marketing site rebuilds and its "Download for macOS" button picks up
+      # the new DMG URL. The conditional means this is a no-op until the
+      # secret is configured — safe to ship before the hook exists.
+      - name: Trigger website rebuild
+        if: success() && env.HOOK != ''
+        env:
+          HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: curl -fsS -X POST "$HOOK"
