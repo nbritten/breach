@@ -1,6 +1,6 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { api, isDemoModeActive } from "./api";
-import { DEMO_PINNED_REPOS } from "./demoFixtures";
+import { getDemoPinnedRepos, setDemoPinnedRepos } from "./demoFixtures";
 
 // Adding a new setting key? Also update src/lib/settingsIo.ts
 // (SettingsExport, buildExport, parseImport, applyImport) so it round-trips
@@ -70,8 +70,19 @@ export async function getPinnedRepos(): Promise<string[]> {
 // `pinnedRepos` setting, so the dashboard layout looks intentional. The real
 // pinnedRepos is untouched — toggle demo off and the user's pins come back.
 export async function getEffectivePinnedRepos(): Promise<string[]> {
-  if (isDemoModeActive()) return DEMO_PINNED_REPOS;
+  if (isDemoModeActive()) return getDemoPinnedRepos();
   return getPinnedRepos();
+}
+
+// In demo mode, pin changes live in an in-memory store that resets when demo
+// mode is turned off — so a user pinning during a demo session doesn't leak
+// fake repo names into their real pinned-repos setting.
+export async function setEffectivePinnedRepos(pins: string[]): Promise<void> {
+  if (isDemoModeActive()) {
+    setDemoPinnedRepos(pins);
+    return;
+  }
+  await setPinnedRepos(pins);
 }
 
 export async function getServiceUrlTemplate(): Promise<string> {
