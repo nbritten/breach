@@ -18,9 +18,15 @@ jobs:
           node-version: "22"
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          # Universal builds compile against both targets, so include both in
+          # the cache key — otherwise switching between arm-only and universal
+          # builds would invalidate the whole cache unnecessarily.
+          key: universal
       - run: npm ci
 
       - name: Import Apple Developer ID certificate
@@ -42,7 +48,11 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
           releaseBody: |
-            Signed and notarized macOS build for Apple Silicon.
+            Signed and notarized macOS universal build (Apple Silicon + Intel).
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
+          # Universal binary: lipos x86_64 and aarch64 slices into one .app.
+          # The DMG roughly doubles in size (~10 MB → ~20 MB), but one
+          # download serves both architectures.
+          args: --target universal-apple-darwin
