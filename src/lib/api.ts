@@ -9,8 +9,24 @@ import type {
   RepoSummary,
   SyncResult,
 } from "../types";
+import { demoApi } from "./demoApi";
 
-export const api = {
+// Demo mode flips this flag at runtime via setDemoModeActive. Settings reads
+// the persisted value on launch and calls in; the toggle calls in on change.
+// We keep this module-level rather than per-call so we don't have to thread an
+// `isDemo` parameter through every call site or wrap every component in a
+// context. Call sites still look like normal async calls.
+let demoActive = false;
+
+export function setDemoModeActive(active: boolean): void {
+  demoActive = active;
+}
+
+export function isDemoModeActive(): boolean {
+  return demoActive;
+}
+
+const real = {
   listRepos: (reposPath: string) =>
     invoke<RepoSummary[]>("list_repos", { reposPath }),
   repoSummary: (repoPath: string) =>
@@ -59,3 +75,17 @@ export const api = {
   startReposWatcher: (reposPath: string) =>
     invoke<void>("start_repos_watcher", { reposPath }),
 };
+
+type Api = typeof real;
+
+// Pick the active implementation lazily per-call so flipping the demo toggle
+// doesn't require restarting the app.
+function pick<K extends keyof Api>(key: K): Api[K] {
+  return (demoActive ? (demoApi as unknown as Api) : real)[key];
+}
+
+export const api: Api = new Proxy(real, {
+  get(_target, prop: string) {
+    return pick(prop as keyof Api);
+  },
+});

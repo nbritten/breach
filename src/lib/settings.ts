@@ -1,5 +1,6 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
-import { api } from "./api";
+import { api, isDemoModeActive } from "./api";
+import { DEMO_PINNED_REPOS } from "./demoFixtures";
 
 // Adding a new setting key? Also update src/lib/settingsIo.ts
 // (SettingsExport, buildExport, parseImport, applyImport) so it round-trips
@@ -16,6 +17,7 @@ const SERVICE_URL_TEMPLATE_KEY = "serviceUrlTemplate";
 const SERVICE_REPOS_KEY = "serviceRepos";
 const TERMINAL_APP_KEY = "terminalApp";
 const CHECK_FOR_UPDATES_KEY = "checkForUpdates";
+const DEMO_MODE_KEY = "demoMode";
 
 export const FALLBACK_DEFAULT_BRANCH = "main";
 
@@ -64,6 +66,14 @@ export async function getPinnedRepos(): Promise<string[]> {
   return (await store.get<string[]>(PINNED_REPOS_KEY)) ?? [];
 }
 
+// Demo mode pins the curated 10 repos at the top regardless of the user's real
+// `pinnedRepos` setting, so the dashboard layout looks intentional. The real
+// pinnedRepos is untouched — toggle demo off and the user's pins come back.
+export async function getEffectivePinnedRepos(): Promise<string[]> {
+  if (isDemoModeActive()) return DEMO_PINNED_REPOS;
+  return getPinnedRepos();
+}
+
 export async function getServiceUrlTemplate(): Promise<string> {
   return (await store.get<string>(SERVICE_URL_TEMPLATE_KEY)) ?? "";
 }
@@ -97,6 +107,17 @@ export async function getCheckForUpdates(): Promise<boolean> {
 
 export async function setCheckForUpdates(enabled: boolean): Promise<void> {
   await store.set(CHECK_FOR_UPDATES_KEY, enabled);
+  await store.save();
+}
+
+// Intentionally not exported via settingsIo: demoMode is a local UI toggle, not
+// something to round-trip through Export / Import.
+export async function getDemoMode(): Promise<boolean> {
+  return (await store.get<boolean>(DEMO_MODE_KEY)) ?? false;
+}
+
+export async function setDemoMode(enabled: boolean): Promise<void> {
+  await store.set(DEMO_MODE_KEY, enabled);
   await store.save();
 }
 

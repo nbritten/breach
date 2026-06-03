@@ -7,6 +7,7 @@ import {
   getBranchOverrides,
   getCheckForUpdates,
   getDefaultBranch,
+  getDemoMode,
   getPinnedRepos,
   getRepoOrgs,
   getReposPath,
@@ -16,6 +17,7 @@ import {
   setBranchOverrides,
   setCheckForUpdates,
   setDefaultBranch,
+  setDemoMode,
   setPinnedRepos,
   setRepoOrgs,
   setReposPath,
@@ -23,6 +25,8 @@ import {
   setServiceUrlTemplate,
   setTerminalApp,
 } from "../lib/settings";
+import { setDemoModeActive } from "../lib/api";
+import { demoReset } from "../lib/demoFixtures";
 import { SettingsSection } from "../components/settings/SettingsSection";
 import { RemoveButton } from "../components/settings/RemoveButton";
 import { useToast } from "../lib/toast";
@@ -65,6 +69,7 @@ export function Settings() {
   const [terminalApp, setTerminalAppState] = useState("");
   const [terminalSuggestions, setTerminalSuggestions] = useState<string[]>([]);
   const [checkUpdates, setCheckUpdates] = useState(true);
+  const [demoMode, setDemoModeState] = useState(false);
   const [saved, setSaved] = useState(false);
   const [imported, setImported] = useState(false);
   const { show: showOnboarding } = useOnboarding();
@@ -74,7 +79,7 @@ export function Settings() {
   useEffect(() => {
     (async () => {
       try {
-        const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk] =
+        const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk, demo] =
           await Promise.all([
             getReposPath(),
             getDefaultBranch(),
@@ -85,6 +90,7 @@ export function Settings() {
             getServiceRepos(),
             getTerminalApp(),
             getCheckForUpdates(),
+            getDemoMode(),
           ]);
         setPath(p);
         setFallback(f);
@@ -96,6 +102,7 @@ export function Settings() {
         setServices(serviceList.map((n) => newServiceRow(n)));
         setTerminalAppState(term);
         setCheckUpdates(chk);
+        setDemoModeState(demo);
       } catch (e) {
         showError(e);
       }
@@ -131,7 +138,12 @@ export function Settings() {
         setServiceRepos(serviceList),
         setTerminalApp(terminalApp.trim()),
         setCheckForUpdates(checkUpdates),
+        setDemoMode(demoMode),
       ]);
+      // Flip the runtime API dispatcher to match. Demo mode toggling off
+      // resets the fixture state so the next session starts fresh.
+      setDemoModeActive(demoMode);
+      if (!demoMode) demoReset();
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
       return true;
@@ -460,6 +472,29 @@ export function Settings() {
             </div>
           ))}
         </SettingsSection>
+
+        <section className="mb-8 mt-12 pt-6 border-t border-neutral-900">
+          <h2 className="text-xs uppercase tracking-wide text-neutral-500 mb-3">
+            Advanced
+          </h2>
+          <label className="flex items-start gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={demoMode}
+              onChange={(e) => setDemoModeState(e.currentTarget.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-medium">Demo mode</span>
+              <span className="block text-xs text-neutral-500 mt-0.5">
+                Replaces real repo + GitHub data with a fixed set of fake
+                repos. Useful for previewing Breach without configuring
+                anything, or for screenshots and demos. Save to apply, then
+                head to the dashboard.
+              </span>
+            </span>
+          </label>
+        </section>
 
         <div className="flex items-center gap-3">
           <button
