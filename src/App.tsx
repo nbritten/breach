@@ -77,52 +77,74 @@ function Rail() {
   );
 }
 
-function OnboardingGate() {
-  const { visible, show, hide } = useOnboarding();
-  const [autoShow, setAutoShow] = useState(false);
+type BootState = "loading" | "first-launch" | "ready";
+
+function AppShell() {
+  const { visible, hide } = useOnboarding();
+  const [bootState, setBootState] = useState<BootState>("loading");
   const [initialPath, setInitialPath] = useState("~/repos");
-  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     (async () => {
-      try {
-        const flag = await getOnboarded();
-        if (flag) {
-          setAutoShow(false);
-          setReady(true);
-          return;
-        }
-        const [path, orgs, pins] = await Promise.all([
-          getReposPath(),
-          getRepoOrgs(),
-          getPinnedRepos(),
-        ]);
-        setInitialPath(path);
-        if (orgs.length > 0 || pins.length > 0) {
-          // Existing user predating the onboarding flag — silently mark as done.
-          await setOnboarded(true);
-          setAutoShow(false);
-        } else {
-          setAutoShow(true);
-          show();
-        }
-      } finally {
-        setReady(true);
+      const flag = await getOnboarded();
+      if (flag) {
+        setBootState("ready");
+        return;
+      }
+      const [path, orgs, pins] = await Promise.all([
+        getReposPath(),
+        getRepoOrgs(),
+        getPinnedRepos(),
+      ]);
+      setInitialPath(path);
+      if (orgs.length > 0 || pins.length > 0) {
+        // Existing user predating the onboarding flag — silently mark as done.
+        await setOnboarded(true);
+        setBootState("ready");
+      } else {
+        setBootState("first-launch");
       }
     })();
-  }, [show]);
+  }, []);
 
-  if (!ready || !visible) return null;
+  if (bootState === "loading") return null;
+
+  // First launch: don't mount the dashboard at all. Otherwise list_repos,
+  // the watcher, and PR fetches all fire against the unconfigured default
+  // path and surface as a red error toast behind the wizard.
+  if (bootState === "first-launch") {
+    return (
+      <Onboarding
+        persistOnFinish
+        initialReposPath={initialPath}
+        onDone={() => setBootState("ready")}
+      />
+    );
+  }
 
   return (
-    <Onboarding
-      persistOnFinish={autoShow}
-      initialReposPath={initialPath}
-      onDone={() => {
-        setAutoShow(false);
-        hide();
-      }}
-    />
+    <>
+      <div className="h-full flex flex-col">
+        <TopBar />
+        <div className="flex-1 flex overflow-hidden">
+          <Rail />
+          <div className="flex-1 overflow-hidden">
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/repo/:path" element={<RepoDetail />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </div>
+        </div>
+      </div>
+      {visible && (
+        <Onboarding
+          persistOnFinish={false}
+          initialReposPath={initialPath}
+          onDone={hide}
+        />
+      )}
+    </>
   );
 }
 
@@ -131,20 +153,7 @@ export default function App() {
     <ToastProvider>
       <SearchProvider>
         <OnboardingProvider>
-          <div className="h-full flex flex-col">
-            <TopBar />
-            <div className="flex-1 flex overflow-hidden">
-              <Rail />
-              <div className="flex-1 overflow-hidden">
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/repo/:path" element={<RepoDetail />} />
-                  <Route path="/settings" element={<Settings />} />
-                </Routes>
-              </div>
-            </div>
-          </div>
-          <OnboardingGate />
+          <AppShell />
         </OnboardingProvider>
       </SearchProvider>
     </ToastProvider>

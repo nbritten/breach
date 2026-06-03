@@ -29,11 +29,15 @@ pub fn expand(path: &str) -> PathBuf {
 }
 
 /// Scan a directory for immediate subdirectories that are git repositories.
-/// Sorted by path for deterministic ordering. Empty Vec if the directory doesn't exist.
+/// Sorted by path for deterministic ordering. Empty Vec if the directory doesn't
+/// exist — the dashboard's empty state is a better surface for "you haven't
+/// configured a real path yet" than a red error toast.
 pub async fn scan_git_repos(root: &Path) -> Result<Vec<PathBuf>, String> {
-    let mut entries = fs::read_dir(root)
-        .await
-        .map_err(|e| format!("cannot read {}: {e}", root.display()))?;
+    let mut entries = match fs::read_dir(root).await {
+        Ok(e) => e,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("cannot read {}: {e}", root.display())),
+    };
 
     let mut candidates = Vec::new();
     while let Some(entry) = entries.next_entry().await.map_err(|e| e.to_string())? {
@@ -106,5 +110,14 @@ mod tests {
             expand_with_home("~alice/thing", Some(home())),
             PathBuf::from("~alice/thing")
         );
+    }
+
+    #[tokio::test]
+    async fn scan_returns_empty_for_missing_directory() {
+        // A non-existent reposPath is the fresh-install default. The dashboard's
+        // empty state is a better surface than a red error toast.
+        let nowhere = PathBuf::from("/this/path/should/not/exist/by/any/chance");
+        let result = scan_git_repos(&nowhere).await;
+        assert_eq!(result, Ok(vec![]));
     }
 }

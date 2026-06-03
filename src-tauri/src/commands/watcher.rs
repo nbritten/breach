@@ -60,7 +60,11 @@ pub fn start_repos_watcher(
 ) -> Result<(), String> {
     let root = expand(&repos_path);
     if !root.exists() {
-        return Err(format!("repos path does not exist: {}", root.display()));
+        // Soft-fail: a non-existent repos path is normal on a fresh install
+        // before the user has configured anything real. The dashboard's empty
+        // state already communicates that nothing's being watched; an Err
+        // here would surface as a red toast on every launch.
+        return Ok(());
     }
 
     // Drop the previous watcher first so we don't briefly hold two on the same
