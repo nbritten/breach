@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 import { useOnboarding } from "../lib/onboarding";
 import {
@@ -74,6 +74,7 @@ export function Settings() {
   const [imported, setImported] = useState(false);
   const { show: showOnboarding } = useOnboarding();
   const { show: showToast, showError } = useToast();
+  const navigate = useNavigate();
   const [checkingUpdate, setCheckingUpdate] = useState(false);
 
   useEffect(() => {
@@ -498,7 +499,12 @@ export function Settings() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={save}
+            onClick={async () => {
+              // Save returns true on success; only navigate away then so a
+              // validation/persist failure leaves the user on the form with
+              // their unsaved edits and the error toast they got from save().
+              if (await save()) navigate("/");
+            }}
             className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm"
           >
             Save
