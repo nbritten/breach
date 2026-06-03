@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, isDemoModeActive } from "../lib/api";
+import { api } from "../lib/api";
 import {
   buildServiceUrl,
   getEffectivePinnedRepos,
@@ -9,7 +9,7 @@ import {
   getServiceRepos,
   getServiceUrlTemplate,
   openTerminal,
-  setPinnedRepos,
+  setEffectivePinnedRepos,
 } from "../lib/settings";
 import { useSearch } from "../lib/search";
 import { useToast } from "../lib/toast";
@@ -44,15 +44,14 @@ export function Dashboard() {
 
   const togglePin = useCallback(
     async (name: string) => {
-      // In demo mode the pinned list is a hardcoded fixture; persisting a
-      // toggle here would leak demo names into the user's real settings and
-      // break the dashboard once they turn demo off.
-      if (isDemoModeActive()) return;
       const next = pinnedOrder.includes(name)
         ? pinnedOrder.filter((n) => n !== name)
         : [...pinnedOrder, name];
       setPinnedOrder(next);
-      await setPinnedRepos(next);
+      // setEffectivePinnedRepos routes to either the real settings store or
+      // demo mode's in-memory store, so pinning during a demo session updates
+      // the dashboard without leaking demo names into real pinnedRepos.
+      await setEffectivePinnedRepos(next);
     },
     [pinnedOrder],
   );

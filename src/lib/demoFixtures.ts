@@ -404,9 +404,21 @@ function generateMicroservices(count: number): DemoRepo[] {
 const MICROSERVICES: DemoRepo[] = generateMicroservices(110);
 const ALL_REPOS: DemoRepo[] = [...REPOS, ...MICROSERVICES];
 
-// Names of the repos that should appear in the "Pinned" section in demo mode.
-// These are the hand-curated 10 — the microservices fill the long tail below.
-export const DEMO_PINNED_REPOS: string[] = REPOS.map((r) => r.name);
+// Names of the repos that should appear in the "Pinned" section in demo mode
+// on first load. The hand-curated 10 — the microservices fill the long tail
+// below. Users can pin/unpin during the demo and those changes persist in
+// memory (see mutablePinned below) until demo mode is turned off.
+const DEFAULT_DEMO_PINNED: string[] = REPOS.map((r) => r.name);
+
+let mutablePinned: string[] | null = null;
+
+export function getDemoPinnedRepos(): string[] {
+  return mutablePinned ?? DEFAULT_DEMO_PINNED;
+}
+
+export function setDemoPinnedRepos(pins: string[]): void {
+  mutablePinned = pins;
+}
 
 // Mutated by demoApplySync so a refresh after sync reflects the new state
 // (the `behind` repo goes to up-to-date). Reset on demoReset (called when the
@@ -425,4 +437,5 @@ export function demoApplySync(): void {
 
 export function demoReset(): void {
   mutableState = null;
+  mutablePinned = null;
 }
