@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { filterRepos, groupRepos } from "./dashboard";
-import type { RepoSummary } from "../types";
+import {
+  filterByChips,
+  filterRepos,
+  groupRepos,
+  repoFilterCounts,
+  type RepoFilter,
+} from "./dashboard";
+import type { CiStatus, MyPrs, RepoSummary } from "../types";
 
 function repo(name: string, branch: string | null = "main"): RepoSummary {
   return {
@@ -77,5 +83,87 @@ describe("groupRepos", () => {
     const sections = groupRepos(repos, ["a", "b", "c", "d"]);
     expect(sections.map((s) => s.key)).toEqual(["__pinned__"]);
     expect(sections[0].repos.map((r) => r.name)).toEqual(["a", "b", "c", "d"]);
+  });
+});
+
+describe("filterByChips and repoFilterCounts", () => {
+  const dirtyRepo = { ...repo("alpha"), dirty: true };
+  const behindRepo = { ...repo("beta"), behind: 3 };
+  const aheadRepo = { ...repo("gamma"), ahead: 1 };
+  const cleanRepo = repo("delta");
+  const repos = [dirtyRepo, behindRepo, aheadRepo, cleanRepo];
+
+  const emptyPrs: MyPrs = { authored: {}, review_requested: {}, errors: {} };
+  const prsForBeta: MyPrs = {
+    authored: {
+      acme: [
+        { number: 1, title: "x", url: "u", is_draft: false, repo: "beta" },
+      ],
+    },
+    review_requested: {},
+    errors: {},
+  };
+
+  const ciFailedAlpha: Record<string, CiStatus> = {
+    "/repos/alpha": {
+      state: "failure",
+      conclusion: "failure",
+      workflow: "CI",
+      url: null,
+    },
+  };
+
+  it("returns the same array when no filters are active", () => {
+    const active = new Set<RepoFilter>();
+    expect(filterByChips(repos, active, emptyPrs, {})).toBe(repos);
+  });
+
+  it("filters by dirty state", () => {
+    const active = new Set<RepoFilter>(["dirty"]);
+    expect(
+      filterByChips(repos, active, emptyPrs, {}).map((r) => r.name),
+    ).toEqual(["alpha"]);
+  });
+
+  it("ORs multiple active filters", () => {
+    const active = new Set<RepoFilter>(["dirty", "behind"]);
+    expect(
+      filterByChips(repos, active, emptyPrs, {}).map((r) => r.name),
+    ).toEqual(["alpha", "beta"]);
+  });
+
+  it("matches open-prs filter via authored PRs", () => {
+    const active = new Set<RepoFilter>(["open-prs"]);
+    expect(
+      filterByChips(repos, active, prsForBeta, {}).map((r) => r.name),
+    ).toEqual(["beta"]);
+  });
+
+  it("matches failing-ci filter via ciByPath", () => {
+    const active = new Set<RepoFilter>(["failing-ci"]);
+    expect(
+      filterByChips(repos, active, emptyPrs, ciFailedAlpha).map((r) => r.name),
+    ).toEqual(["alpha"]);
+  });
+
+  it("counts each dimension independently", () => {
+    const counts = repoFilterCounts(repos, prsForBeta, ciFailedAlpha);
+    expect(counts).toEqual({
+      dirty: 1,
+      behind: 1,
+      ahead: 1,
+      "open-prs": 1,
+      "failing-ci": 1,
+    });
+  });
+
+  it("counts a repo against multiple dimensions if it matches multiple", () => {
+    const messy = [
+      { ...repo("messy"), dirty: true, behind: 2, ahead: 3 },
+    ];
+    const counts = repoFilterCounts(messy, emptyPrs, {});
+    expect(counts.dirty).toBe(1);
+    expect(counts.behind).toBe(1);
+    expect(counts.ahead).toBe(1);
   });
 });

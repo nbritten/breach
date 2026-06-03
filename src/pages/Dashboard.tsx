@@ -22,7 +22,15 @@ import { CloneMissingModal } from "../components/CloneMissingModal";
 import { EmptyState } from "../components/EmptyState";
 import { Tooltip } from "../components/Tooltip";
 import type { CiStatus, MyPrs, PrInfo, RepoSummary } from "../types";
-import { filterRepos, groupRepos } from "../lib/dashboard";
+import {
+  filterByChips,
+  filterRepos,
+  groupRepos,
+  REPO_FILTER_LABELS,
+  REPO_FILTER_ORDER,
+  repoFilterCounts,
+  type RepoFilter,
+} from "../lib/dashboard";
 
 const EMPTY_PRS: PrInfo[] = [];
 
@@ -190,10 +198,35 @@ export function Dashboard() {
 
   const dirtyCount = repos.filter((r) => r.dirty).length;
   const { query } = useSearch();
+  const [activeFilters, setActiveFilters] = useState<Set<RepoFilter>>(
+    new Set(),
+  );
 
-  const filteredRepos = useMemo(
+  const toggleFilter = (f: RepoFilter) =>
+    setActiveFilters((prev) => {
+      const next = new Set(prev);
+      next.has(f) ? next.delete(f) : next.add(f);
+      return next;
+    });
+
+  // Counts come from the search-filtered set, not the chip-filtered set, so
+  // the count next to "Dirty" is "dirty among repos matching your search",
+  // not "dirty among repos already filtered by other active chips" (which
+  // would create weird interactions where activating Behind shrinks the Dirty
+  // count).
+  const searchFiltered = useMemo(
     () => filterRepos(repos, query),
     [repos, query],
+  );
+
+  const filterCounts = useMemo(
+    () => repoFilterCounts(searchFiltered, prs, ciByPath),
+    [searchFiltered, prs, ciByPath],
+  );
+
+  const filteredRepos = useMemo(
+    () => filterByChips(searchFiltered, activeFilters, prs, ciByPath),
+    [searchFiltered, activeFilters, prs, ciByPath],
   );
 
   const sections = useMemo(
@@ -292,6 +325,37 @@ export function Dashboard() {
       </header>
 
       <main className="flex-1 overflow-auto p-6">
+        {repos.length > 0 &&
+          REPO_FILTER_ORDER.some(
+            (f) => filterCounts[f] > 0 || activeFilters.has(f),
+          ) && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {REPO_FILTER_ORDER.map((f) => {
+                const count = filterCounts[f];
+                const active = activeFilters.has(f);
+                // Hide chips with zero matches unless they're active — keeps
+                // the row quiet on a clean dashboard but never strands a
+                // chip the user toggled into a no-match state.
+                if (count === 0 && !active) return null;
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => toggleFilter(f)}
+                    aria-pressed={active}
+                    className={`px-2.5 py-1 rounded-full text-xs border transition ${
+                      active
+                        ? "bg-breach-pink/20 border-breach-pink/50 text-breach-pink"
+                        : "bg-neutral-800/60 border-neutral-700 text-neutral-300 hover:bg-neutral-800"
+                    }`}
+                  >
+                    {REPO_FILTER_LABELS[f]}{" "}
+                    <span className="opacity-60">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         {error ? (
           <div className="text-rose-400 text-sm">{error}</div>
         ) : repos.length === 0 && !loading ? (
@@ -314,6 +378,12 @@ export function Dashboard() {
               </>
             }
             subtitle="Try a different name or branch. Press Esc to clear."
+          />
+        ) : filteredRepos.length === 0 && activeFilters.size > 0 ? (
+          <EmptyState
+            size="md"
+            title="No repos match the active filters"
+            subtitle="Toggle a chip off above to widen the view."
           />
         ) : (
           <div className="flex flex-col gap-6">
