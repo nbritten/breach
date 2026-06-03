@@ -78,6 +78,18 @@ export const demoApi = {
     await sleep(60);
     return demoCiStatus(repos);
   },
+  listActiveClaudeSessions: async (
+    repoPaths: string[],
+  ): Promise<string[]> => {
+    await sleep(40);
+    // Hand-picked: a couple of the curated 10 always look "in active use"
+    // during a demo recording so the indicator has a story to tell.
+    const active = new Set([
+      "/Users/demo/repos/northstar-api",
+      "/Users/demo/repos/ml-pipeline",
+    ]);
+    return repoPaths.filter((p) => active.has(p));
+  },
   openInTerminal: async (_repoPath: string, _app: string): Promise<string> =>
     "Terminal",
   listTerminalApps: async (): Promise<string[]> => ["Terminal", "iTerm"],

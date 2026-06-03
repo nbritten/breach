@@ -81,6 +81,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(commands::watcher::WatcherState::default())
         .invoke_handler(tauri::generate_handler![
+            commands::agents::list_active_claude_sessions,
             commands::repos::list_repos,
             commands::repos::repo_summary,
             commands::repos::repo_diff,

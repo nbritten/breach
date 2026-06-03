@@ -24,6 +24,7 @@ interface Props {
   pinned?: boolean;
   onTogglePin?: (name: string) => void;
   ci?: CiStatus;
+  claudeActive?: boolean;
   docsUrl?: string | null;
 }
 
@@ -51,6 +52,7 @@ export function RepoCard({
   pinned = false,
   onTogglePin,
   ci,
+  claudeActive = false,
   docsUrl,
 }: Props) {
   const slug = encodeURIComponent(repo.path);
@@ -109,6 +111,26 @@ export function RepoCard({
                 CI_DOT[ci.state].color
               } ${CI_DOT[ci.state].pulse ? "animate-pulse" : ""}`}
             />
+          )}
+          {claudeActive && (
+            <span
+              title="Active Claude Code session"
+              aria-label="Active Claude Code session"
+              className="shrink-0 text-[#D97757]"
+            >
+              {/* Approximation of the Claude mark — 8-point asterisk with
+                  alternating long/short petals. Custom shape kept lightweight
+                  rather than pulling in a third-party icon set. */}
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path d="M12 1.5 L13.4 8.4 L18.7 4.2 L15.6 10.6 L22.5 12 L15.6 13.4 L18.7 19.8 L13.4 15.6 L12 22.5 L10.6 15.6 L5.3 19.8 L8.4 13.4 L1.5 12 L8.4 10.6 L5.3 4.2 L10.6 8.4 Z" />
+              </svg>
+            </span>
           )}
           <h3 className="font-semibold truncate">{repo.name}</h3>
         </div>

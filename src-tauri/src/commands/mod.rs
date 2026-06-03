@@ -1,3 +1,4 @@
+pub mod agents;
 pub mod gh;
 pub mod notifications;
 pub mod repos;

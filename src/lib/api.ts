@@ -67,6 +67,8 @@ const real = {
     invoke<NotificationPoll>("pr_notifications_changed", { lastModified }),
   listCiStatus: (repos: { path: string; branch: string }[]) =>
     invoke<Record<string, CiStatus>>("list_ci_status", { repos }),
+  listActiveClaudeSessions: (repoPaths: string[]) =>
+    invoke<string[]>("list_active_claude_sessions", { repoPaths }),
   openInTerminal: (repoPath: string, app: string) =>
     invoke<string>("open_in_terminal", { repoPath, app }),
   listTerminalApps: () => invoke<string[]>("list_terminal_apps"),

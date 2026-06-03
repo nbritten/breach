@@ -14,7 +14,11 @@ import {
 import { useSearch } from "../lib/search";
 import { useToast } from "../lib/toast";
 import { errorText } from "../lib/errors";
-import { useCiStatusPoll, usePrNotificationsPoll } from "../lib/hooks";
+import {
+  useActiveClaudeSessionsPoll,
+  useCiStatusPoll,
+  usePrNotificationsPoll,
+} from "../lib/hooks";
 
 import { RepoCard } from "../components/RepoCard";
 import { SyncAllModal } from "../components/SyncAllModal";
@@ -45,6 +49,9 @@ export function Dashboard() {
   const [orgs, setOrgs] = useState<string[]>([]);
   const [prs, setPrs] = useState<MyPrs>({ authored: {}, review_requested: {}, errors: {} });
   const [ciByPath, setCiByPath] = useState<Record<string, CiStatus>>({});
+  const [activeClaudeSessions, setActiveClaudeSessions] = useState<Set<string>>(
+    new Set(),
+  );
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [serviceTpl, setServiceTpl] = useState("");
   const [serviceSet, setServiceSet] = useState<Set<string>>(new Set());
@@ -134,6 +141,15 @@ export function Dashboard() {
     (result) => setCiByPath((prev) => ({ ...prev, ...result })),
   );
 
+  // Claude session detection is a cheap local `ps + lsof` check, so a
+  // tighter cadence than CI is fine. 15s feels live without being noisy.
+  useActiveClaudeSessionsPoll(
+    repos.length > 0,
+    15_000,
+    () => repos.map((r) => r.path),
+    setActiveClaudeSessions,
+  );
+
   // Single-repo refresh is best-effort: if the repo was deleted between the
   // watcher event and our refetch, repoSummary errors out — fall back to a
   // full re-list so the deleted card is removed instead of going stale.
@@ -220,13 +236,21 @@ export function Dashboard() {
   );
 
   const filterCounts = useMemo(
-    () => repoFilterCounts(searchFiltered, prs, ciByPath),
-    [searchFiltered, prs, ciByPath],
+    () =>
+      repoFilterCounts(searchFiltered, prs, ciByPath, activeClaudeSessions),
+    [searchFiltered, prs, ciByPath, activeClaudeSessions],
   );
 
   const filteredRepos = useMemo(
-    () => filterByChips(searchFiltered, activeFilters, prs, ciByPath),
-    [searchFiltered, activeFilters, prs, ciByPath],
+    () =>
+      filterByChips(
+        searchFiltered,
+        activeFilters,
+        prs,
+        ciByPath,
+        activeClaudeSessions,
+      ),
+    [searchFiltered, activeFilters, prs, ciByPath, activeClaudeSessions],
   );
 
   const sections = useMemo(
@@ -425,6 +449,7 @@ export function Dashboard() {
                           pinned={pinnedOrder.includes(r.name)}
                           onTogglePin={togglePin}
                           ci={ciByPath[r.path]}
+                          claudeActive={activeClaudeSessions.has(r.path)}
                           docsUrl={
                             serviceSet.has(r.name)
                               ? buildServiceUrl(serviceTpl, r.name)

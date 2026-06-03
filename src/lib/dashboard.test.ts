@@ -154,7 +154,24 @@ describe("filterByChips and repoFilterCounts", () => {
       ahead: 1,
       "open-prs": 1,
       "failing-ci": 1,
+      "claude-active": 0,
     });
+  });
+
+  it("matches claude-active filter via the active set", () => {
+    const active = new Set<RepoFilter>(["claude-active"]);
+    const claudeActive = new Set(["/repos/alpha", "/repos/delta"]);
+    expect(
+      filterByChips(repos, active, emptyPrs, {}, claudeActive).map(
+        (r) => r.name,
+      ),
+    ).toEqual(["alpha", "delta"]);
+  });
+
+  it("counts claude-active when paths match", () => {
+    const claudeActive = new Set(["/repos/alpha"]);
+    const counts = repoFilterCounts(repos, emptyPrs, {}, claudeActive);
+    expect(counts["claude-active"]).toBe(1);
   });
 
   it("counts a repo against multiple dimensions if it matches multiple", () => {

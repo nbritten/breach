@@ -1,6 +1,12 @@
 import type { CiStatus, MyPrs, RepoSummary } from "../types";
 
-export type RepoFilter = "dirty" | "open-prs" | "failing-ci" | "behind" | "ahead";
+export type RepoFilter =
+  | "dirty"
+  | "open-prs"
+  | "failing-ci"
+  | "behind"
+  | "ahead"
+  | "claude-active";
 
 export const REPO_FILTER_ORDER: RepoFilter[] = [
   "dirty",
@@ -8,6 +14,7 @@ export const REPO_FILTER_ORDER: RepoFilter[] = [
   "failing-ci",
   "behind",
   "ahead",
+  "claude-active",
 ];
 
 export const REPO_FILTER_LABELS: Record<RepoFilter, string> = {
@@ -16,6 +23,7 @@ export const REPO_FILTER_LABELS: Record<RepoFilter, string> = {
   "failing-ci": "Failing CI",
   behind: "Behind",
   ahead: "Ahead",
+  "claude-active": "Claude active",
 };
 
 /**
@@ -37,6 +45,7 @@ function matchesFilter(
   filter: RepoFilter,
   prs: MyPrs,
   ciByPath: Record<string, CiStatus>,
+  claudeActive: ReadonlySet<string>,
 ): boolean {
   switch (filter) {
     case "dirty":
@@ -49,6 +58,8 @@ function matchesFilter(
       return hasOpenPr(repo.name, prs);
     case "failing-ci":
       return ciByPath[repo.path]?.state === "failure";
+    case "claude-active":
+      return claudeActive.has(repo.path);
   }
 }
 
@@ -62,10 +73,11 @@ export function filterByChips(
   active: ReadonlySet<RepoFilter>,
   prs: MyPrs,
   ciByPath: Record<string, CiStatus>,
+  claudeActive: ReadonlySet<string> = new Set(),
 ): RepoSummary[] {
   if (active.size === 0) return repos;
   return repos.filter((r) =>
-    [...active].some((f) => matchesFilter(r, f, prs, ciByPath)),
+    [...active].some((f) => matchesFilter(r, f, prs, ciByPath, claudeActive)),
   );
 }
 
@@ -78,6 +90,7 @@ export function repoFilterCounts(
   repos: RepoSummary[],
   prs: MyPrs,
   ciByPath: Record<string, CiStatus>,
+  claudeActive: ReadonlySet<string> = new Set(),
 ): Record<RepoFilter, number> {
   const counts: Record<RepoFilter, number> = {
     dirty: 0,
@@ -85,10 +98,11 @@ export function repoFilterCounts(
     "failing-ci": 0,
     behind: 0,
     ahead: 0,
+    "claude-active": 0,
   };
   for (const r of repos) {
     for (const f of REPO_FILTER_ORDER) {
-      if (matchesFilter(r, f, prs, ciByPath)) counts[f]++;
+      if (matchesFilter(r, f, prs, ciByPath, claudeActive)) counts[f]++;
     }
   }
   return counts;
