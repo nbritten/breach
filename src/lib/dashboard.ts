@@ -11,7 +11,7 @@ export const REPO_FILTER_ORDER: RepoFilter[] = [
 ];
 
 export const REPO_FILTER_LABELS: Record<RepoFilter, string> = {
-  dirty: "Dirty",
+  dirty: "Changes",
   "open-prs": "Open PRs",
   "failing-ci": "Failing CI",
   behind: "Behind",
