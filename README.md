@@ -15,13 +15,10 @@
 </p>
 
 <p align="center">
-  <!--
-    Pick one source for the URL below before merging:
-      (a) drag-drop ../breach-website/public/demo.mp4 into a GitHub issue/PR
-          comment to get a https://github.com/user-attachments/assets/<uuid> URL
-          (recommended: hosted forever by GitHub)
-      (b) reference the deployed site, e.g. https://<your-vercel-url>/demo.mp4
-  -->
+
+https://github.com/user-attachments/assets/6dd15e95-063e-4cec-a5e0-6fd674d4ad17
+
+
   <video src="REPLACE_WITH_DEMO_URL" controls></video>
 </p>
 
