@@ -1,44 +1,75 @@
 use std::collections::HashSet;
 
+use serde::Serialize;
 use tokio::process::Command;
 
-/// Find which of `repo_paths` currently has a `claude` (Claude Code CLI)
-/// process whose working directory lives inside it. Process scan is done
-/// with `ps` + `lsof` — both cheap, no extra dependencies.
+/// Coding-agent CLIs we look for. Adding a new one is one line: append the
+/// `(stable id, process name)` tuple. The id is what the frontend keys its
+/// indicator rendering off of and what shows up in the serialized payload.
 ///
-/// Returns the subset of input paths that have at least one active session.
-/// Empty `repo_paths` short-circuits.
+/// Process names are matched against the basename of `ps -axo comm=`, so
+/// `claude`, `/opt/homebrew/bin/claude`, and `node-bin/claude` all match
+/// `claude`. Pick names exact enough to avoid colliding with unrelated tools.
+const AGENT_PROCESS_NAMES: &[(&str, &str)] = &[
+    ("claude", "claude"),
+    ("codex", "codex"),
+];
+
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AgentSession {
+    pub provider: String,
+    pub repo_path: String,
+}
+
+/// For each known agent CLI, find running processes and report which of
+/// `repo_paths` contains each process's cwd. Returns one entry per
+/// `(provider, repo)` pair — multiple processes for the same provider in
+/// the same repo collapse to a single session entry.
 #[tauri::command]
-pub async fn list_active_claude_sessions(
+pub async fn list_active_agent_sessions(
     repo_paths: Vec<String>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<AgentSession>, String> {
     if repo_paths.is_empty() {
         return Ok(Vec::new());
     }
 
-    let pids = claude_pids().await?;
-    if pids.is_empty() {
+    let all_pids = ps_pids_by_name().await?;
+    if all_pids.is_empty() {
         return Ok(Vec::new());
     }
 
-    let mut active: HashSet<String> = HashSet::new();
-    for pid in pids {
-        let Some(cwd) = process_cwd(pid).await else {
+    let mut sessions: HashSet<AgentSession> = HashSet::new();
+    for (provider_id, process_name) in AGENT_PROCESS_NAMES {
+        let Some(pids) = all_pids.iter().find_map(|(name, pids)| {
+            if name == process_name {
+                Some(pids)
+            } else {
+                None
+            }
+        }) else {
             continue;
         };
-        for repo_path in &repo_paths {
-            if path_contains(repo_path, &cwd) {
-                active.insert(repo_path.clone());
-                break;
+        for pid in pids {
+            let Some(cwd) = process_cwd(*pid).await else {
+                continue;
+            };
+            for repo_path in &repo_paths {
+                if path_contains(repo_path, &cwd) {
+                    sessions.insert(AgentSession {
+                        provider: (*provider_id).to_string(),
+                        repo_path: repo_path.clone(),
+                    });
+                    break;
+                }
             }
         }
     }
-    Ok(active.into_iter().collect())
+    Ok(sessions.into_iter().collect())
 }
 
-/// PIDs of running processes whose command name is exactly `claude` (matches
-/// the Claude Code CLI; ignores anything else with `claude` in the path).
-async fn claude_pids() -> Result<Vec<u32>, String> {
+/// Parse `ps -axo pid=,comm=` once into `name -> Vec<pid>`. Cheaper than
+/// running ps once per provider when we add more agents.
+async fn ps_pids_by_name() -> Result<Vec<(String, Vec<u32>)>, String> {
     let output = Command::new("ps")
         .args(["-axo", "pid=,comm="])
         .output()
@@ -48,21 +79,23 @@ async fn claude_pids() -> Result<Vec<u32>, String> {
         return Err("ps returned non-zero".into());
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(stdout
-        .lines()
-        .filter_map(|line| {
-            let line = line.trim();
-            let mut parts = line.splitn(2, char::is_whitespace);
-            let pid_str = parts.next()?;
-            let comm = parts.next()?.trim();
-            let name = comm.rsplit('/').next().unwrap_or(comm);
-            if name == "claude" {
-                pid_str.parse().ok()
-            } else {
-                None
-            }
-        })
-        .collect())
+
+    let mut buckets: std::collections::HashMap<String, Vec<u32>> =
+        std::collections::HashMap::new();
+    for line in stdout.lines() {
+        let line = line.trim();
+        let mut parts = line.splitn(2, char::is_whitespace);
+        let (Some(pid_str), Some(comm)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        let comm = comm.trim();
+        let basename = comm.rsplit('/').next().unwrap_or(comm);
+        let Ok(pid) = pid_str.parse::<u32>() else {
+            continue;
+        };
+        buckets.entry(basename.to_string()).or_default().push(pid);
+    }
+    Ok(buckets.into_iter().collect())
 }
 
 /// Working directory of a process by PID, via `lsof -F n -d cwd`. Returns
@@ -125,4 +158,3 @@ mod tests {
         assert!(!path_contains("/Users/a/repos/foo", "/tmp/elsewhere"));
     }
 }
-

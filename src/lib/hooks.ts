@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { api } from "./api";
-import type { CiStatus } from "../types";
+import type { AgentSession, CiStatus } from "../types";
 
 /**
  * Listen for the Escape key and fire `onEscape`. Set `enabled` to false to skip
@@ -131,16 +131,16 @@ export function useCiStatusPoll(
 }
 
 /**
- * Periodic poll of which repos have an active Claude Code session right now.
- * Same shape as useCiStatusPoll — ticks while the window is visible,
- * skips when no repos are configured, swallows network errors. The session
- * detection is a cheap `ps + lsof` shell-out, so a tight cadence is fine.
+ * Periodic poll of which repos have an active coding-agent CLI session
+ * (Claude, Codex, etc.) right now. Ticks while the window is visible, skips
+ * when no repos are configured, swallows errors. Detection is a cheap
+ * `ps + lsof` shell-out so a tight cadence is fine.
  */
-export function useActiveClaudeSessionsPoll(
+export function useActiveAgentSessionsPoll(
   enabled: boolean,
   intervalMs: number,
   request: () => string[],
-  onUpdate: (active: Set<string>) => void,
+  onUpdate: (sessions: AgentSession[]) => void,
 ) {
   const requestRef = useRef(request);
   requestRef.current = request;
@@ -156,11 +156,11 @@ export function useActiveClaudeSessionsPoll(
       const paths = requestRef.current();
       if (paths.length === 0) return;
       try {
-        const result = await api.listActiveClaudeSessions(paths);
+        const result = await api.listActiveAgentSessions(paths);
         if (cancelled) return;
-        onUpdateRef.current(new Set(result));
+        onUpdateRef.current(result);
       } catch (err) {
-        console.warn("Claude session poll failed", err);
+        console.warn("Agent session poll failed", err);
       }
     };
 

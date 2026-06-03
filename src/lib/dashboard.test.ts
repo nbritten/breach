@@ -154,24 +154,32 @@ describe("filterByChips and repoFilterCounts", () => {
       ahead: 1,
       "open-prs": 1,
       "failing-ci": 1,
-      "claude-active": 0,
+      "agent:claude": 0,
+      "agent:codex": 0,
     });
   });
 
-  it("matches claude-active filter via the active set", () => {
-    const active = new Set<RepoFilter>(["claude-active"]);
-    const claudeActive = new Set(["/repos/alpha", "/repos/delta"]);
+  it("matches per-provider agent filters via the agents-by-repo map", () => {
+    const claudeOnly = new Set<RepoFilter>(["agent:claude"]);
+    const agents = {
+      "/repos/alpha": new Set<"claude" | "codex">(["claude"]),
+      "/repos/beta": new Set<"claude" | "codex">(["codex"]),
+      "/repos/delta": new Set<"claude" | "codex">(["claude", "codex"]),
+    };
     expect(
-      filterByChips(repos, active, emptyPrs, {}, claudeActive).map(
-        (r) => r.name,
-      ),
+      filterByChips(repos, claudeOnly, emptyPrs, {}, agents).map((r) => r.name),
     ).toEqual(["alpha", "delta"]);
   });
 
-  it("counts claude-active when paths match", () => {
-    const claudeActive = new Set(["/repos/alpha"]);
-    const counts = repoFilterCounts(repos, emptyPrs, {}, claudeActive);
-    expect(counts["claude-active"]).toBe(1);
+  it("counts agent filters per provider", () => {
+    const agents = {
+      "/repos/alpha": new Set<"claude" | "codex">(["claude"]),
+      "/repos/beta": new Set<"claude" | "codex">(["codex"]),
+      "/repos/gamma": new Set<"claude" | "codex">(["claude", "codex"]),
+    };
+    const counts = repoFilterCounts(repos, emptyPrs, {}, agents);
+    expect(counts["agent:claude"]).toBe(2);
+    expect(counts["agent:codex"]).toBe(2);
   });
 
   it("counts a repo against multiple dimensions if it matches multiple", () => {

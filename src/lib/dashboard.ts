@@ -1,4 +1,10 @@
-import type { CiStatus, MyPrs, RepoSummary } from "../types";
+import type {
+  AgentProvider,
+  CiStatus,
+  MyPrs,
+  RepoSummary,
+} from "../types";
+import { AGENT_INFO, AGENT_PROVIDER_ORDER } from "./agents";
 
 export type RepoFilter =
   | "dirty"
@@ -6,7 +12,7 @@ export type RepoFilter =
   | "failing-ci"
   | "behind"
   | "ahead"
-  | "claude-active";
+  | `agent:${AgentProvider}`;
 
 export const REPO_FILTER_ORDER: RepoFilter[] = [
   "dirty",
@@ -14,17 +20,29 @@ export const REPO_FILTER_ORDER: RepoFilter[] = [
   "failing-ci",
   "behind",
   "ahead",
-  "claude-active",
+  ...AGENT_PROVIDER_ORDER.map((p): RepoFilter => `agent:${p}`),
 ];
 
-export const REPO_FILTER_LABELS: Record<RepoFilter, string> = {
+const STATIC_FILTER_LABELS: Record<
+  Exclude<RepoFilter, `agent:${AgentProvider}`>,
+  string
+> = {
   dirty: "Changes",
   "open-prs": "Open PRs",
   "failing-ci": "Failing CI",
   behind: "Behind",
   ahead: "Ahead",
-  "claude-active": "Claude active",
 };
+
+export function repoFilterLabel(filter: RepoFilter): string {
+  if (filter.startsWith("agent:")) {
+    const provider = filter.slice("agent:".length) as AgentProvider;
+    return `${AGENT_INFO[provider].label} active`;
+  }
+  return STATIC_FILTER_LABELS[
+    filter as Exclude<RepoFilter, `agent:${AgentProvider}`>
+  ];
+}
 
 /**
  * True if `name` shows up as the `repo` field of any PR the user authored
@@ -45,8 +63,12 @@ function matchesFilter(
   filter: RepoFilter,
   prs: MyPrs,
   ciByPath: Record<string, CiStatus>,
-  claudeActive: ReadonlySet<string>,
+  agents: Record<string, ReadonlySet<AgentProvider>>,
 ): boolean {
+  if (filter.startsWith("agent:")) {
+    const provider = filter.slice("agent:".length) as AgentProvider;
+    return agents[repo.path]?.has(provider) ?? false;
+  }
   switch (filter) {
     case "dirty":
       return repo.dirty;
@@ -58,8 +80,12 @@ function matchesFilter(
       return hasOpenPr(repo.name, prs);
     case "failing-ci":
       return ciByPath[repo.path]?.state === "failure";
-    case "claude-active":
-      return claudeActive.has(repo.path);
+    default:
+      // Unreachable: every non-`agent:` variant of RepoFilter is handled
+      // above; the `agent:` variants early-returned at the top of the
+      // function. TS can't narrow the template-literal union to know the
+      // switch is exhaustive, hence the explicit default.
+      return false;
   }
 }
 
@@ -73,11 +99,11 @@ export function filterByChips(
   active: ReadonlySet<RepoFilter>,
   prs: MyPrs,
   ciByPath: Record<string, CiStatus>,
-  claudeActive: ReadonlySet<string> = new Set(),
+  agents: Record<string, ReadonlySet<AgentProvider>> = {},
 ): RepoSummary[] {
   if (active.size === 0) return repos;
   return repos.filter((r) =>
-    [...active].some((f) => matchesFilter(r, f, prs, ciByPath, claudeActive)),
+    [...active].some((f) => matchesFilter(r, f, prs, ciByPath, agents)),
   );
 }
 
@@ -90,19 +116,14 @@ export function repoFilterCounts(
   repos: RepoSummary[],
   prs: MyPrs,
   ciByPath: Record<string, CiStatus>,
-  claudeActive: ReadonlySet<string> = new Set(),
+  agents: Record<string, ReadonlySet<AgentProvider>> = {},
 ): Record<RepoFilter, number> {
-  const counts: Record<RepoFilter, number> = {
-    dirty: 0,
-    "open-prs": 0,
-    "failing-ci": 0,
-    behind: 0,
-    ahead: 0,
-    "claude-active": 0,
-  };
+  const counts = Object.fromEntries(
+    REPO_FILTER_ORDER.map((f) => [f, 0] as const),
+  ) as Record<RepoFilter, number>;
   for (const r of repos) {
     for (const f of REPO_FILTER_ORDER) {
-      if (matchesFilter(r, f, prs, ciByPath, claudeActive)) counts[f]++;
+      if (matchesFilter(r, f, prs, ciByPath, agents)) counts[f]++;
     }
   }
   return counts;
