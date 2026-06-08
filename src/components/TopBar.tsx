@@ -1,4 +1,5 @@
 import { useEffect, useRef, type CSSProperties } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useSearch } from "../lib/search";
 import { UpdateIndicator } from "./UpdateIndicator";
@@ -6,6 +7,8 @@ import logo from "../assets/logo.png";
 
 export function TopBar() {
   const { query, setQuery } = useSearch();
+  const { pathname } = useLocation();
+  const isSettings = pathname.startsWith("/settings");
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -50,10 +53,13 @@ export function TopBar() {
       style={drag}
       className="shrink-0 h-16 flex items-center pr-3 pl-[88px] bg-[#0d1024] text-white select-none border-b border-white/5"
     >
-      <div
-        data-tauri-drag-region
-        style={drag}
-        className="flex items-center gap-3 pointer-events-none"
+      <Link
+        to="/"
+        data-no-drag
+        style={noDrag}
+        title="Repositories"
+        aria-label="Repositories"
+        className="flex items-center gap-3 rounded-md -ml-1 pl-1 pr-2 py-1 hover:bg-white/5 transition-colors"
       >
         <img
           src={logo}
@@ -65,7 +71,7 @@ export function TopBar() {
         <span className="font-semibold tracking-tight text-[15px]">
           Breach
         </span>
-      </div>
+      </Link>
 
       <div className="ml-2 flex items-center">
         <UpdateIndicator />
@@ -100,6 +106,33 @@ export function TopBar() {
           ⌘K
         </kbd>
       </div>
+
+      <Link
+        to="/settings"
+        data-no-drag
+        style={noDrag}
+        title="Settings"
+        aria-label="Settings"
+        className={`ml-2 flex items-center justify-center w-8 h-8 rounded-md transition-colors ${
+          isSettings
+            ? "bg-white/15 text-white"
+            : "text-white/60 hover:text-white hover:bg-white/10"
+        }`}
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      </Link>
     </header>
   );
 }
