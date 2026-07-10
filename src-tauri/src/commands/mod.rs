@@ -44,7 +44,7 @@ pub async fn scan_git_repos(root: &Path) -> Result<Vec<PathBuf>, String> {
     while let Some(entry) = entries.next_entry().await.map_err(|e| e.to_string())? {
         let path = entry.path();
         if let Ok(meta) = fs::metadata(&path).await {
-            if meta.is_dir() && git::is_git_repo(&path).await {
+            if meta.is_dir() && git::is_git_repo(&path) {
                 candidates.push(path);
             }
         }
