@@ -20,6 +20,7 @@ import {
   usePrNotificationsPoll,
 } from "../lib/hooks";
 import { agentsByRepo } from "../lib/agents";
+import { jsonEqual } from "../lib/equality";
 
 import { RepoCard } from "../components/RepoCard";
 import { SyncAllModal } from "../components/SyncAllModal";
@@ -94,18 +95,31 @@ export function Dashboard() {
       });
   }, []);
 
+  // Timestamp of the last completed refresh, used by the focus handler to
+  // skip redundant full refreshes. A ref (not state) because reading it must
+  // never re-render and the focus listener wants a stable closure.
+  const lastRefreshAt = useRef(0);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const path = await getReposPath();
-      setPath(path);
-      const [list, pinned, nextOrgs, tpl, services] = await Promise.all([
-        api.listRepos(path),
+      // The settings reads don't depend on the repos path — kick them off
+      // first so only listRepos has to wait for the path lookup.
+      const settingsReads = Promise.all([
         getEffectivePinnedRepos(),
         getRepoOrgs(),
         getServiceUrlTemplate(),
         getServiceRepos(),
+      ]);
+      // If getReposPath throws we bail before awaiting settingsReads; the
+      // no-op catch keeps that from surfacing as an unhandled rejection.
+      settingsReads.catch(() => {});
+      const path = await getReposPath();
+      setPath(path);
+      const [list, [pinned, nextOrgs, tpl, services]] = await Promise.all([
+        api.listRepos(path),
+        settingsReads,
       ]);
       setRepos(list);
       setPinnedOrder(pinned);
@@ -130,6 +144,7 @@ export function Dashboard() {
     } catch (e) {
       setError(errorText(e));
     } finally {
+      lastRefreshAt.current = Date.now();
       setLoading(false);
     }
   }, [refreshPrs]);
@@ -147,16 +162,28 @@ export function Dashboard() {
     // errored or returned no runs, so a transient gh hiccup on any one repo
     // would otherwise wipe its dot until the next tick. Full refresh()
     // (focus / watcher) still uses replace and prunes stale keys.
-    (result) => setCiByPath((prev) => ({ ...prev, ...result })),
+    // Keep the previous object when the merge is a no-op — every tick builds
+    // fresh objects, and swapping identity for identical content would
+    // invalidate filterCounts/filteredRepos/sections and re-render every
+    // RepoCard for nothing.
+    (result) =>
+      setCiByPath((prev) => {
+        const merged = { ...prev, ...result };
+        return jsonEqual(prev, merged) ? prev : merged;
+      }),
   );
 
   // Agent session detection is a cheap local `ps + lsof` check, so a
   // tighter cadence than CI is fine. 15s feels live without being noisy.
+  // Sessions are usually unchanged tick to tick, but the poll returns a
+  // fresh array each time — keep the old identity when the content matches
+  // so agentsByPath (and everything memoized off it) stays stable on idle.
   useActiveAgentSessionsPoll(
     repos.length > 0,
     15_000,
     () => repos.map((r) => r.path),
-    setAgentSessions,
+    (result) =>
+      setAgentSessions((prev) => (jsonEqual(prev, result) ? prev : result)),
   );
 
   // Single-repo refresh is best-effort: if the repo was deleted between the
@@ -180,8 +207,15 @@ export function Dashboard() {
   // Catch sleep/wake gaps and "tabbed away for an hour" cases the watcher
   // can't cover on its own — FSEvents occasionally misses across sleep, and
   // remote-driven state (PRs, CI) doesn't show up in the local filesystem.
+  // Throttled: a full refresh spawns one git subprocess per repo plus one gh
+  // call per repo, so rapid cmd-tabbing must not fire it on every focus.
+  // Anything fresher than 30s is plenty for the stale-window case above.
   useEffect(() => {
-    const onFocus = () => refresh();
+    const FOCUS_REFRESH_MIN_GAP_MS = 30_000;
+    const onFocus = () => {
+      if (Date.now() - lastRefreshAt.current < FOCUS_REFRESH_MIN_GAP_MS) return;
+      refresh();
+    };
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [refresh]);
@@ -199,16 +233,37 @@ export function Dashboard() {
   // the affected repo. Reads the latest repo list via a ref so the listener
   // doesn't need to re-bind on every state change. An event for a path we
   // don't have yet (new clone, removed dir) triggers a full re-list.
+  //
+  // Both paths are coalesced, because the watcher fires per filesystem event
+  // and a checkout / npm install / coding-agent run is a burst of hundreds:
+  // - Known repos get a trailing-edge debounce per path (one timer each), so
+  //   a burst costs one repoSummary call ~500ms after it quiets down.
+  // - Unknown paths (repo mid-clone, non-repo dir) get a leading-edge
+  //   throttle on the full refresh — at most one re-list per 5s, since a
+  //   clone in progress can otherwise re-trigger it every 250ms.
   const reposRef = useRef(repos);
   reposRef.current = repos;
   useEffect(() => {
+    const REFRESH_ONE_DEBOUNCE_MS = 500;
+    const UNKNOWN_PATH_REFRESH_GAP_MS = 5_000;
     let unlisten: (() => void) | null = null;
     let cancelled = false;
+    const debounceTimers = new Map<string, number>();
+    let lastUnknownRefreshAt = 0;
     listen<{ path: string }>("repo-changed", (event) => {
       const path = event.payload.path;
       if (reposRef.current.some((r) => r.path === path)) {
-        refreshOne(path);
-      } else {
+        const pending = debounceTimers.get(path);
+        if (pending !== undefined) window.clearTimeout(pending);
+        debounceTimers.set(
+          path,
+          window.setTimeout(() => {
+            debounceTimers.delete(path);
+            refreshOne(path);
+          }, REFRESH_ONE_DEBOUNCE_MS),
+        );
+      } else if (Date.now() - lastUnknownRefreshAt >= UNKNOWN_PATH_REFRESH_GAP_MS) {
+        lastUnknownRefreshAt = Date.now();
         refresh();
       }
     }).then((fn) => {
@@ -218,6 +273,8 @@ export function Dashboard() {
     return () => {
       cancelled = true;
       unlisten?.();
+      for (const id of debounceTimers.values()) window.clearTimeout(id);
+      debounceTimers.clear();
     };
   }, [refresh, refreshOne]);
 

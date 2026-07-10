@@ -41,9 +41,15 @@ export function usePrNotificationsPoll(
     let cancelled = false;
     let lastModified: string | null = null;
     let bootstrapped = false;
+    // Overlap guard: each tick shells out to gh, and a slow network call can
+    // outlast the interval. Skipping while one is in flight keeps a laggy
+    // tick from stacking concurrent subprocesses instead of just running late.
+    let inFlight = false;
 
     const tick = async () => {
       if (document.visibilityState !== "visible") return;
+      if (inFlight) return;
+      inFlight = true;
       try {
         const res = await api.pollPrNotifications(lastModified);
         if (cancelled) return;
@@ -57,6 +63,8 @@ export function usePrNotificationsPoll(
         // Network blips and transient gh errors shouldn't toast — quietly try again
         // on the next interval.
         console.warn("PR notification poll failed", err);
+      } finally {
+        inFlight = false;
       }
     };
 
@@ -103,17 +111,25 @@ export function useCiStatusPoll(
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
+    // Overlap guard: listCiStatus fans out one `gh run list` subprocess per
+    // repo, so a tick that outlasts the interval (slow network, many repos)
+    // must not overlap the next one — that would multiply the fan-out.
+    let inFlight = false;
 
     const tick = async () => {
       if (document.visibilityState !== "visible") return;
+      if (inFlight) return;
       const repos = requestRef.current();
       if (repos.length === 0) return;
+      inFlight = true;
       try {
         const result = await api.listCiStatus(repos);
         if (cancelled) return;
         onUpdateRef.current(result);
       } catch (err) {
         console.warn("CI status poll failed", err);
+      } finally {
+        inFlight = false;
       }
     };
 
@@ -150,17 +166,25 @@ export function useActiveAgentSessionsPoll(
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
+    // Overlap guard: detection is normally fast, but `lsof` can stall for
+    // seconds under load — skip the tick rather than pile up concurrent
+    // shell-outs when one is still running.
+    let inFlight = false;
 
     const tick = async () => {
       if (document.visibilityState !== "visible") return;
+      if (inFlight) return;
       const paths = requestRef.current();
       if (paths.length === 0) return;
+      inFlight = true;
       try {
         const result = await api.listActiveAgentSessions(paths);
         if (cancelled) return;
         onUpdateRef.current(result);
       } catch (err) {
         console.warn("Agent session poll failed", err);
+      } finally {
+        inFlight = false;
       }
     };
 
