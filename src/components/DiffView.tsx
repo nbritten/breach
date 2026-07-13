@@ -68,19 +68,13 @@ const INITIAL_VISIBLE_FILES = 20;
  */
 function FileCard({ meta }: { meta: ParsedFile }) {
   const mode: DiffRenderMode = diffRenderMode(meta);
-  // Deferred files stay as a cheap placeholder until the user opts in.
+  // Deferred files stay as a cheap placeholder until the user opts in. A
+  // card never survives across diffs — the parent keys it by diff generation
+  // so switching diffs remounts it — which is what makes this initializer
+  // (and the useMemo below) safe: `meta` can't change under a live card, so
+  // a stale `loaded` can never pair with a bigger file and build its model.
   const [loaded, setLoaded] = useState(mode !== "deferred");
   const [open, setOpen] = useState(true);
-
-  // Cards are keyed by file path, so the same component instance can receive
-  // a different parsed file when the user switches diffs (working tree vs. a
-  // commit). Re-derive `loaded` then, so a path that was small in one diff
-  // doesn't eagerly render a huge version of itself in the next.
-  const [prevMeta, setPrevMeta] = useState(meta);
-  if (meta !== prevMeta) {
-    setPrevMeta(meta);
-    setLoaded(mode !== "deferred");
-  }
 
   const diffFile = useMemo(() => {
     if (!loaded || meta.isBinary) return null;
@@ -187,13 +181,22 @@ export function DiffView({ diff, empty = "No changes." }: Props) {
   const files = useMemo(() => parseUnifiedDiff(diff), [diff]);
 
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_FILES);
-  // Reset the "Show more" window whenever a different diff comes in (e.g.
-  // switching between commits), so an expanded view of one huge diff doesn't
-  // force the next diff to mount everything at once.
+  // When a different diff comes in (e.g. switching between commits), reset
+  // the "Show more" window — so an expanded view of one huge diff doesn't
+  // force the next diff to mount everything at once — and bump `generation`,
+  // which is part of every card's key. The new key remounts each card, and a
+  // remount is the only reset that's safe here: re-deriving state inside a
+  // surviving card runs the rest of its render (including the DiffFile
+  // useMemo) once with the stale `loaded` before React retries, which would
+  // synchronously build the model for a file the new diff wants deferred.
+  // This render-phase setState is fine, by contrast: React retries the
+  // *parent* before rendering children, so no card ever sees a stale key.
+  const [generation, setGeneration] = useState(0);
   const [prevDiff, setPrevDiff] = useState(diff);
   if (diff !== prevDiff) {
     setPrevDiff(diff);
     setVisibleCount(INITIAL_VISIBLE_FILES);
+    setGeneration((g) => g + 1);
   }
 
   if (files.length === 0) {
@@ -206,7 +209,10 @@ export function DiffView({ diff, empty = "No changes." }: Props) {
   return (
     <div className="flex flex-col gap-3 p-3">
       {visible.map((meta) => (
-        <FileCard key={`${meta.oldPath}->${meta.newPath}`} meta={meta} />
+        <FileCard
+          key={`${generation}:${meta.oldPath}->${meta.newPath}`}
+          meta={meta}
+        />
       ))}
       {hidden > 0 && (
         <button
