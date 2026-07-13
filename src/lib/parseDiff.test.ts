@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseUnifiedDiff } from "./parseDiff";
+import {
+  diffRenderMode,
+  HIGHLIGHT_CHANGED_LINE_LIMIT,
+  parseUnifiedDiff,
+  RENDER_CHANGED_LINE_LIMIT,
+} from "./parseDiff";
 
 describe("parseUnifiedDiff", () => {
   it("returns empty for blank input", () => {
@@ -95,5 +100,83 @@ index 333..444 100644
     const files = parseUnifiedDiff(diff);
     expect(files).toHaveLength(2);
     expect(files.map((f) => f.newPath)).toEqual(["a.ts", "b.ts"]);
+  });
+
+  it("counts additions and deletions per file", () => {
+    const diff = `diff --git a/src/foo.ts b/src/foo.ts
+index abc..def 100644
+--- a/src/foo.ts
++++ b/src/foo.ts
+@@ -1,4 +1,5 @@
+ context
+-old one
+-old two
++new one
++new two
++new three
+ context
+`;
+    const files = parseUnifiedDiff(diff);
+    expect(files[0].additions).toBe(3);
+    expect(files[0].deletions).toBe(2);
+  });
+
+  it("does not count file markers or hunk headers as changed lines", () => {
+    const diff = `diff --git a/a.ts b/a.ts
+index 111..222 100644
+--- a/a.ts
++++ b/a.ts
+@@ -1 +1 @@
+-a
++A
+`;
+    const files = parseUnifiedDiff(diff);
+    // Only the actual -a/+A lines, not `--- a/a.ts`, `+++ b/a.ts`, or `@@`.
+    expect(files[0].additions).toBe(1);
+    expect(files[0].deletions).toBe(1);
+  });
+
+  it("counts removed lines whose content starts with dashes", () => {
+    const diff = `diff --git a/a.md b/a.md
+index 111..222 100644
+--- a/a.md
++++ b/a.md
+@@ -1,2 +1,1 @@
+ title
+----
+`;
+    const files = parseUnifiedDiff(diff);
+    // The removed line's content is `---`; it must still count as a deletion.
+    expect(files[0].additions).toBe(0);
+    expect(files[0].deletions).toBe(1);
+  });
+
+  it("reports zero counts for binary files", () => {
+    const diff = `diff --git a/image.png b/image.png
+index abc..def 100644
+Binary files a/image.png and b/image.png differ
+`;
+    const files = parseUnifiedDiff(diff);
+    expect(files[0].additions).toBe(0);
+    expect(files[0].deletions).toBe(0);
+  });
+});
+
+describe("diffRenderMode", () => {
+  const withChanged = (n: number) => ({ additions: Math.ceil(n / 2), deletions: Math.floor(n / 2) });
+
+  it("renders small files fully highlighted", () => {
+    expect(diffRenderMode(withChanged(0))).toBe("full");
+    expect(diffRenderMode(withChanged(HIGHLIGHT_CHANGED_LINE_LIMIT))).toBe("full");
+  });
+
+  it("skips highlighting above the highlight limit", () => {
+    expect(diffRenderMode(withChanged(HIGHLIGHT_CHANGED_LINE_LIMIT + 1))).toBe("plain");
+    expect(diffRenderMode(withChanged(RENDER_CHANGED_LINE_LIMIT))).toBe("plain");
+  });
+
+  it("defers files above the render limit", () => {
+    expect(diffRenderMode(withChanged(RENDER_CHANGED_LINE_LIMIT + 1))).toBe("deferred");
+    expect(diffRenderMode(withChanged(100_000))).toBe("deferred");
   });
 });
