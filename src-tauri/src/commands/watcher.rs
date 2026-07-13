@@ -48,6 +48,52 @@ fn repo_for_event(event_path: &Path, repos_root: &Path) -> Option<PathBuf> {
     Some(repos_root.join(first.as_os_str()))
 }
 
+/// Should this event path be dropped instead of dispatched?
+///
+/// The frontend reacts to `repo-changed` by running `git status`, and
+/// `git status --porcelain=v2` is not a passive reader: it takes
+/// `.git/index.lock` (and usually rewrites `.git/index` via the opportunistic
+/// index refresh). Those writes land right back in this watcher, which would
+/// emit another `repo-changed`, trigger another status, and echo forever —
+/// one dashboard refresh per debounce window, per repo, indefinitely. Breaking
+/// the loop means dropping the event categories that git's own bookkeeping
+/// generates:
+///
+/// - `*.lock` files inside `.git` (`index.lock`, `HEAD.lock`, ref locks under
+///   `.git/refs/`): pure transient scaffolding — every git write creates and
+///   deletes one, and the interesting write shows up as its own event anyway.
+/// - `.git/objects/`: object and pack churn (`git gc`, fetch unpacking, pack
+///   compaction) that says nothing about the checked-out state.
+/// - `.git/FETCH_HEAD`: rewritten by every fetch even when nothing changed.
+///
+/// Everything else in `.git` stays interesting: `HEAD` (branch switch),
+/// `index` (staging — and while status's refresh can rewrite it, that rewrite
+/// only happens when stat info was stale, so it settles after one extra round
+/// rather than looping), and `.git/refs/**` (commits, resets, fetches that
+/// actually moved a branch). Working-tree paths — including a `Cargo.lock` at
+/// the repo top level — are never noise.
+fn is_noise(path: &Path) -> bool {
+    let mut after_git = path
+        .components()
+        .map(|c| c.as_os_str())
+        .skip_while(|c| *c != ".git");
+    if after_git.next().is_none() {
+        // No `.git` component: a working-tree change, always interesting.
+        return false;
+    }
+    let Some(first) = after_git.next() else {
+        // The event is on the `.git` directory itself (e.g. a fresh clone
+        // appearing). Keep it — it's how a new repo announces itself.
+        return false;
+    };
+    if first == "objects" || first == "FETCH_HEAD" {
+        return true;
+    }
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.ends_with(".lock"))
+}
+
 /// Start watching `repos_path` recursively for filesystem changes. Events are
 /// debounced over a short window, grouped per repo, and surfaced to the
 /// frontend via the `repo-changed` Tauri event so it can re-fetch just the
@@ -126,12 +172,28 @@ pub fn start_repos_watcher(
             let mut affected: HashSet<PathBuf> = HashSet::new();
             for event in events {
                 for path in &event.event.paths {
+                    if is_noise(path) {
+                        continue;
+                    }
                     if let Some(repo) = repo_for_event(path, &root_for_task) {
                         affected.insert(repo);
                     }
                 }
             }
             for repo in affected {
+                // Drop events for paths that exist but are not directories. A
+                // plain file sitting directly in the repos root (Finder's
+                // .DS_Store is the classic — it rewrites that file constantly)
+                // resolves to a "repo" path the frontend has never heard of,
+                // and an unknown path makes it fall back to a full dashboard
+                // refresh. A path that no longer exists is different: that's a
+                // repo being deleted, and the frontend needs the event to
+                // re-list and drop the stale card. This check lives here
+                // rather than in repo_for_event so that function stays pure
+                // and its tests stay filesystem-free.
+                if repo.exists() && !repo.is_dir() {
+                    continue;
+                }
                 let _ = app.emit(
                     REPO_CHANGED_EVENT,
                     RepoChanged {
@@ -192,5 +254,65 @@ mod tests {
         // path, which has no first component — no specific repo to dispatch.
         let root = PathBuf::from("/Users/me/repos");
         assert_eq!(repo_for_event(&root, &root), None);
+    }
+
+    #[test]
+    fn noise_index_lock() {
+        assert!(is_noise(Path::new("/Users/me/repos/foo/.git/index.lock")));
+    }
+
+    #[test]
+    fn noise_head_lock() {
+        assert!(is_noise(Path::new("/Users/me/repos/foo/.git/HEAD.lock")));
+    }
+
+    #[test]
+    fn noise_ref_lock() {
+        assert!(is_noise(Path::new(
+            "/Users/me/repos/foo/.git/refs/heads/main.lock"
+        )));
+    }
+
+    #[test]
+    fn noise_objects() {
+        assert!(is_noise(Path::new(
+            "/Users/me/repos/foo/.git/objects/ab/cdef0123456789"
+        )));
+        assert!(is_noise(Path::new(
+            "/Users/me/repos/foo/.git/objects/pack/pack-abc123.pack"
+        )));
+    }
+
+    #[test]
+    fn noise_fetch_head() {
+        assert!(is_noise(Path::new("/Users/me/repos/foo/.git/FETCH_HEAD")));
+    }
+
+    #[test]
+    fn keeps_head_index_and_refs() {
+        // These are the events that signal real state changes: branch
+        // switches, staging, and commits/fetches that moved a ref.
+        assert!(!is_noise(Path::new("/Users/me/repos/foo/.git/HEAD")));
+        assert!(!is_noise(Path::new("/Users/me/repos/foo/.git/index")));
+        assert!(!is_noise(Path::new(
+            "/Users/me/repos/foo/.git/refs/heads/main"
+        )));
+        assert!(!is_noise(Path::new(
+            "/Users/me/repos/foo/.git/refs/remotes/origin/main"
+        )));
+    }
+
+    #[test]
+    fn keeps_working_tree_paths() {
+        assert!(!is_noise(Path::new("/Users/me/repos/foo/src/main.rs")));
+        // Lock-suffixed files outside .git are real project files.
+        assert!(!is_noise(Path::new("/Users/me/repos/foo/Cargo.lock")));
+        assert!(!is_noise(Path::new("/Users/me/repos/foo/yarn.lock")));
+    }
+
+    #[test]
+    fn keeps_dot_git_dir_itself() {
+        // A fresh clone appearing shows up as an event on .git itself.
+        assert!(!is_noise(Path::new("/Users/me/repos/foo/.git")));
     }
 }

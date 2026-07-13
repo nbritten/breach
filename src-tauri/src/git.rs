@@ -45,12 +45,16 @@ pub async fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-pub async fn is_git_repo(path: &Path) -> bool {
+/// A directory counts as a git repo iff it has a `.git` entry: a directory in
+/// normal clones, a gitdir-pointer file in linked worktrees and submodules.
+/// We deliberately don't fall back to `git rev-parse --is-inside-work-tree` —
+/// that spawned a process for every non-repo directory on every scan, and it
+/// answers the wrong question anyway: it's true for any directory nested
+/// inside some outer work tree, not just repo roots. Bare repos (no `.git`
+/// entry) are intentionally not detected; the dashboard has nothing useful to
+/// show for them.
+pub fn is_git_repo(path: &Path) -> bool {
     path.join(".git").exists()
-        || git(path, &["rev-parse", "--is-inside-work-tree"])
-            .await
-            .map(|s| s.trim() == "true")
-            .unwrap_or(false)
 }
 
 pub async fn repo_summary(path: PathBuf) -> RepoSummary {
