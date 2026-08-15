@@ -28,8 +28,8 @@ export function isDemoModeActive(): boolean {
 }
 
 const real = {
-  listRepos: (reposPath: string) =>
-    invoke<RepoSummary[]>("list_repos", { reposPath }),
+  listRepos: (reposPath: string, scanNested: boolean) =>
+    invoke<RepoSummary[]>("list_repos", { reposPath, scanNested }),
   repoSummary: (repoPath: string) =>
     invoke<RepoSummary>("repo_summary", { repoPath }),
   repoDiff: (repoPath: string) =>
@@ -51,12 +51,14 @@ const real = {
     branchOverrides: Record<string, string>,
     defaultBranch: string,
     onlyRepos: string[],
+    scanNested: boolean,
   ) =>
     invoke<SyncResult[]>("sync_all", {
       reposPath,
       branchOverrides,
       defaultBranch,
       onlyRepos,
+      scanNested,
     }),
   listMissingRepos: (reposPath: string, orgs: string[]) =>
     invoke<string[]>("list_missing_repos", { reposPath, orgs }),
@@ -75,8 +77,8 @@ const real = {
   listTerminalApps: () => invoke<string[]>("list_terminal_apps"),
   defaultReposPath: () => invoke<string>("default_repos_path"),
   homeRelative: (path: string) => invoke<string>("home_relative", { path }),
-  startReposWatcher: (reposPath: string) =>
-    invoke<void>("start_repos_watcher", { reposPath }),
+  startReposWatcher: (reposPath: string, scanNested: boolean) =>
+    invoke<void>("start_repos_watcher", { reposPath, scanNested }),
 };
 
 type Api = typeof real;

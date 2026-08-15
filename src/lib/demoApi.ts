@@ -24,7 +24,10 @@ import {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export const demoApi = {
-  listRepos: async (_reposPath: string): Promise<RepoSummary[]> => {
+  listRepos: async (
+    _reposPath: string,
+    _scanNested: boolean,
+  ): Promise<RepoSummary[]> => {
     await sleep(120);
     return demoRepoSummaries();
   },
@@ -48,6 +51,7 @@ export const demoApi = {
     _branchOverrides: Record<string, string>,
     _defaultBranch: string,
     onlyRepos: string[],
+    _scanNested: boolean,
   ): Promise<SyncResult[]> => {
     await sleep(900);
     const result = demoSyncAll(onlyRepos);
@@ -100,5 +104,8 @@ export const demoApi = {
   homeRelative: async (path: string): Promise<string> =>
     path.replace(/^\/Users\/demo/, "~"),
   // No-op: there's no real filesystem to watch in demo mode.
-  startReposWatcher: async (_reposPath: string): Promise<void> => {},
+  startReposWatcher: async (
+    _reposPath: string,
+    _scanNested: boolean,
+  ): Promise<void> => {},
 };

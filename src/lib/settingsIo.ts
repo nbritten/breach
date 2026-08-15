@@ -7,6 +7,7 @@ import {
   getPinnedRepos,
   getRepoOrgs,
   getReposPath,
+  getScanNestedRepos,
   getServiceRepos,
   getServiceUrlTemplate,
   getTerminalApp,
@@ -16,6 +17,7 @@ import {
   setPinnedRepos,
   setRepoOrgs,
   setReposPath,
+  setScanNestedRepos,
   setServiceRepos,
   setServiceUrlTemplate,
   setTerminalApp,
@@ -35,6 +37,7 @@ export interface SettingsExport {
     serviceRepos: string[];
     terminalApp: string;
     checkForUpdates: boolean;
+    scanNestedRepos: boolean;
   };
 }
 
@@ -51,6 +54,7 @@ export async function buildExport(): Promise<SettingsExport> {
     serviceRepos,
     terminalApp,
     checkForUpdates,
+    scanNestedRepos,
   ] = await Promise.all([
     getReposPath(),
     getDefaultBranch(),
@@ -61,6 +65,7 @@ export async function buildExport(): Promise<SettingsExport> {
     getServiceRepos(),
     getTerminalApp(),
     getCheckForUpdates(),
+    getScanNestedRepos(),
   ]);
   return {
     version: SETTINGS_VERSION,
@@ -74,6 +79,7 @@ export async function buildExport(): Promise<SettingsExport> {
       serviceRepos,
       terminalApp,
       checkForUpdates,
+      scanNestedRepos,
     },
   };
 }
@@ -145,6 +151,11 @@ export function parseImport(text: string): SettingsExport {
   if (s.checkForUpdates !== undefined && typeof s.checkForUpdates !== "boolean") {
     throw new Error("`checkForUpdates` must be a boolean");
   }
+  // scanNestedRepos was added after v1 shipped; treat a missing value as
+  // false so older exports keep the original shallow-scan behavior.
+  if (s.scanNestedRepos !== undefined && typeof s.scanNestedRepos !== "boolean") {
+    throw new Error("`scanNestedRepos` must be a boolean");
+  }
 
   return {
     version: data.version,
@@ -159,6 +170,8 @@ export function parseImport(text: string): SettingsExport {
       terminalApp: typeof s.terminalApp === "string" ? s.terminalApp : "",
       checkForUpdates:
         typeof s.checkForUpdates === "boolean" ? s.checkForUpdates : true,
+      scanNestedRepos:
+        typeof s.scanNestedRepos === "boolean" ? s.scanNestedRepos : false,
     },
   };
 }
@@ -175,6 +188,7 @@ export async function applyImport(payload: SettingsExport): Promise<void> {
     setServiceRepos(s.serviceRepos),
     setTerminalApp(s.terminalApp),
     setCheckForUpdates(s.checkForUpdates),
+    setScanNestedRepos(s.scanNestedRepos),
   ]);
 }
 
@@ -200,6 +214,7 @@ function normalizeSettings(
     serviceRepos: s.serviceRepos.map((x) => x.trim()).filter((x) => x.length > 0),
     terminalApp: s.terminalApp.trim(),
     checkForUpdates: s.checkForUpdates,
+    scanNestedRepos: s.scanNestedRepos,
   };
 }
 

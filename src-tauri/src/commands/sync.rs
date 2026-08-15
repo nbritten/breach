@@ -26,15 +26,18 @@ pub struct SyncResult {
 /// For each repo under `repos_path` (optionally filtered by `only_repos`), fast-forward its
 /// default branch from origin. Dirty repos are skipped without attempting to sync. Branch
 /// is resolved from `branch_overrides` (by repo name) or falls back to `default_branch`.
+/// `scan_nested` is forwarded to the same scan `list_repos` uses so Sync visits
+/// every repo the dashboard is showing.
 #[tauri::command]
 pub async fn sync_all(
     repos_path: String,
     branch_overrides: HashMap<String, String>,
     default_branch: String,
     only_repos: Vec<String>,
+    scan_nested: bool,
 ) -> Result<Vec<SyncResult>, String> {
     let root = expand(&repos_path);
-    let candidates = scan_git_repos(&root).await?;
+    let candidates = scan_git_repos(&root, scan_nested).await?;
 
     let only_set: std::collections::HashSet<String> = only_repos.into_iter().collect();
     let restrict = !only_set.is_empty();

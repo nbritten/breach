@@ -13,6 +13,7 @@ const validPayload: SettingsExport = {
     serviceRepos: ["foo"],
     terminalApp: "Ghostty",
     checkForUpdates: true,
+    scanNestedRepos: false,
   },
 };
 
@@ -91,5 +92,29 @@ describe("parseImport", () => {
       settings: { ...validPayload.settings, checkForUpdates: "yes" },
     };
     expect(() => parseImport(JSON.stringify(bad))).toThrow(/checkForUpdates/);
+  });
+
+  it("treats a missing scanNestedRepos as false (older exports stay importable)", () => {
+    const { scanNestedRepos: _s, ...withoutFlag } = validPayload.settings;
+    const old = { ...validPayload, settings: withoutFlag };
+    const parsed = parseImport(JSON.stringify(old));
+    expect(parsed.settings.scanNestedRepos).toBe(false);
+  });
+
+  it("accepts scanNestedRepos true", () => {
+    const payload = {
+      ...validPayload,
+      settings: { ...validPayload.settings, scanNestedRepos: true },
+    };
+    const parsed = parseImport(JSON.stringify(payload));
+    expect(parsed.settings.scanNestedRepos).toBe(true);
+  });
+
+  it("rejects a non-boolean scanNestedRepos", () => {
+    const bad = {
+      ...validPayload,
+      settings: { ...validPayload.settings, scanNestedRepos: "yes" },
+    };
+    expect(() => parseImport(JSON.stringify(bad))).toThrow(/scanNestedRepos/);
   });
 });

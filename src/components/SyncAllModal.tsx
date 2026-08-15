@@ -4,6 +4,7 @@ import {
   getBranchOverrides,
   getDefaultBranch,
   getPinnedRepos,
+  getScanNestedRepos,
 } from "../lib/settings";
 import type { SyncResult } from "../types";
 import { errorText } from "../lib/errors";
@@ -31,13 +32,20 @@ export function SyncAllModal({ reposPath, onClose }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const [overrides, fallback, pinned] = await Promise.all([
+        const [overrides, fallback, pinned, nested] = await Promise.all([
           getBranchOverrides(),
           getDefaultBranch(),
           getPinnedRepos(),
+          getScanNestedRepos(),
         ]);
         setScope(pinned.length > 0 ? "pinned" : "all");
-        const res = await api.syncAll(reposPath, overrides, fallback, pinned);
+        const res = await api.syncAll(
+          reposPath,
+          overrides,
+          fallback,
+          pinned,
+          nested,
+        );
         setResults(res);
       } catch (e) {
         setError(errorText(e));

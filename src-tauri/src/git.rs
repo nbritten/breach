@@ -53,8 +53,20 @@ pub async fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
 /// inside some outer work tree, not just repo roots. Bare repos (no `.git`
 /// entry) are intentionally not detected; the dashboard has nothing useful to
 /// show for them.
+///
+/// Paths inside a `.git` directory (for example `.git/worktrees/<name>`) are
+/// never repos — that's Git's internal worktree metadata, not a checkout.
 pub fn is_git_repo(path: &Path) -> bool {
+    if path_is_inside_git_dir(path) {
+        return false;
+    }
     path.join(".git").exists()
+}
+
+/// True when `path` has a `.git` path component — i.e. it lives inside Git's
+/// private metadata, not in a working tree.
+pub fn path_is_inside_git_dir(path: &Path) -> bool {
+    path.components().any(|c| c.as_os_str() == ".git")
 }
 
 pub async fn repo_summary(path: PathBuf) -> RepoSummary {
@@ -332,5 +344,57 @@ mod tests {
         assert!(parse_porcelain_line("M").is_none());
         assert!(parse_porcelain_line("MM ").is_none()); // needs XY + space + path
         assert!(parse_porcelain_line("MM a").is_some());
+    }
+
+    fn unique_temp_dir() -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "breach-git-{}-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn is_git_repo_detects_git_directory() {
+        let dir = unique_temp_dir();
+        std::fs::create_dir(dir.join(".git")).unwrap();
+        assert!(is_git_repo(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_git_repo_detects_git_file_worktree() {
+        let dir = unique_temp_dir();
+        std::fs::write(dir.join(".git"), "gitdir: /tmp/repo/.git/worktrees/wt\n").unwrap();
+        assert!(is_git_repo(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_git_repo_rejects_plain_directory() {
+        let dir = unique_temp_dir();
+        assert!(!is_git_repo(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_git_repo_rejects_internal_worktrees_metadata() {
+        let dir = unique_temp_dir();
+        let meta = dir.join(".git").join("worktrees").join("feature");
+        std::fs::create_dir_all(&meta).unwrap();
+        // Even if someone dropped a `.git` entry inside the metadata dir,
+        // the path itself is Git-internal and must not count as a repo.
+        std::fs::write(meta.join(".git"), "nope").unwrap();
+        assert!(!is_git_repo(&meta));
+        assert!(path_is_inside_git_dir(&meta));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

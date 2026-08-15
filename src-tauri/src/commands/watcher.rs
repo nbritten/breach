@@ -8,6 +8,8 @@ use notify_debouncer_full::{new_debouncer_opt, DebounceEventResult, Debouncer, N
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::git;
+
 use super::expand;
 
 /// Tauri-managed handle for the active filesystem watcher. Holding it alive
@@ -39,13 +41,47 @@ const REPO_CHANGED_EVENT: &str = "repo-changed";
 /// reflects an interactive edit within a couple frames.
 const DEBOUNCE_MS: u64 = 250;
 
-/// Find the repo this filesystem event belongs to: the immediate child directory
-/// of `repos_root` that the event path lives under. Returns None if the path
-/// isn't beneath the watched root or the event is on the root itself.
-fn repo_for_event(event_path: &Path, repos_root: &Path) -> Option<PathBuf> {
-    let rel = event_path.strip_prefix(repos_root).ok()?;
-    let first = rel.components().next()?;
-    Some(repos_root.join(first.as_os_str()))
+/// Find the repo this filesystem event belongs to.
+///
+/// Shallow mode (the default): the immediate child directory of `repos_root`
+/// that the event path lives under. Returns None if the path isn't beneath
+/// the watched root or the event is on the root itself.
+///
+/// Nested mode: the closest ancestor that is a git working tree, so a change
+/// inside `project/frontend` refreshes that nested repo rather than the
+/// parent. Paths inside `.git/` walk up to the owning checkout and never
+/// resolve to `.git/worktrees/*` metadata.
+fn repo_for_event(event_path: &Path, repos_root: &Path, nested: bool) -> Option<PathBuf> {
+    if nested {
+        closest_repo(event_path, repos_root, git::is_git_repo)
+    } else {
+        let rel = event_path.strip_prefix(repos_root).ok()?;
+        let first = rel.components().next()?;
+        Some(repos_root.join(first.as_os_str()))
+    }
+}
+
+/// Walk from `event_path` up to `repos_root` (inclusive) and return the
+/// closest path for which `is_repo` is true, skipping anything inside a
+/// `.git` directory.
+fn closest_repo(
+    event_path: &Path,
+    repos_root: &Path,
+    is_repo: impl Fn(&Path) -> bool,
+) -> Option<PathBuf> {
+    if event_path != repos_root && event_path.strip_prefix(repos_root).is_err() {
+        return None;
+    }
+    let mut current = event_path;
+    loop {
+        if !git::path_is_inside_git_dir(current) && is_repo(current) {
+            return Some(current.to_path_buf());
+        }
+        if current == repos_root {
+            return None;
+        }
+        current = current.parent()?;
+    }
 }
 
 /// Should this event path be dropped instead of dispatched?
@@ -101,6 +137,7 @@ fn is_noise(path: &Path) -> bool {
 #[tauri::command]
 pub fn start_repos_watcher(
     repos_path: String,
+    scan_nested: bool,
     state: State<'_, WatcherState>,
     app: AppHandle,
 ) -> Result<(), String> {
@@ -175,7 +212,7 @@ pub fn start_repos_watcher(
                     if is_noise(path) {
                         continue;
                     }
-                    if let Some(repo) = repo_for_event(path, &root_for_task) {
+                    if let Some(repo) = repo_for_event(path, &root_for_task, scan_nested) {
                         affected.insert(repo);
                     }
                 }
@@ -216,7 +253,7 @@ mod tests {
         let root = PathBuf::from("/Users/me/repos");
         let event = PathBuf::from("/Users/me/repos/foo/src/main.rs");
         assert_eq!(
-            repo_for_event(&event, &root),
+            repo_for_event(&event, &root, false),
             Some(PathBuf::from("/Users/me/repos/foo")),
         );
     }
@@ -226,7 +263,7 @@ mod tests {
         let root = PathBuf::from("/Users/me/repos");
         let event = PathBuf::from("/Users/me/repos/foo/.git/HEAD");
         assert_eq!(
-            repo_for_event(&event, &root),
+            repo_for_event(&event, &root, false),
             Some(PathBuf::from("/Users/me/repos/foo")),
         );
     }
@@ -236,7 +273,7 @@ mod tests {
         let root = PathBuf::from("/Users/me/repos");
         let event = PathBuf::from("/Users/me/repos/foo");
         assert_eq!(
-            repo_for_event(&event, &root),
+            repo_for_event(&event, &root, false),
             Some(PathBuf::from("/Users/me/repos/foo")),
         );
     }
@@ -245,7 +282,7 @@ mod tests {
     fn returns_none_outside_root() {
         let root = PathBuf::from("/Users/me/repos");
         let event = PathBuf::from("/tmp/elsewhere");
-        assert_eq!(repo_for_event(&event, &root), None);
+        assert_eq!(repo_for_event(&event, &root, false), None);
     }
 
     #[test]
@@ -253,7 +290,79 @@ mod tests {
         // Stripping the prefix of root from itself gives an empty relative
         // path, which has no first component — no specific repo to dispatch.
         let root = PathBuf::from("/Users/me/repos");
-        assert_eq!(repo_for_event(&root, &root), None);
+        assert_eq!(repo_for_event(&root, &root, false), None);
+    }
+
+    fn nested_is_repo(path: &Path) -> bool {
+        // Simulate the user's layout without touching the filesystem:
+        // /Users/me/dev/project, .../frontend, .../backend, .../feature-worktree
+        matches!(
+            path.to_str(),
+            Some(
+                "/Users/me/dev/project"
+                    | "/Users/me/dev/project/frontend"
+                    | "/Users/me/dev/project/backend"
+                    | "/Users/me/dev/project/feature-worktree"
+            )
+        )
+    }
+
+    #[test]
+    fn nested_resolves_to_innermost_repo() {
+        let root = PathBuf::from("/Users/me/dev");
+        let event = PathBuf::from("/Users/me/dev/project/frontend/src/App.tsx");
+        assert_eq!(
+            closest_repo(&event, &root, nested_is_repo),
+            Some(PathBuf::from("/Users/me/dev/project/frontend")),
+        );
+    }
+
+    #[test]
+    fn nested_resolves_parent_when_change_is_in_parent() {
+        let root = PathBuf::from("/Users/me/dev");
+        let event = PathBuf::from("/Users/me/dev/project/README.md");
+        assert_eq!(
+            closest_repo(&event, &root, nested_is_repo),
+            Some(PathBuf::from("/Users/me/dev/project")),
+        );
+    }
+
+    #[test]
+    fn nested_resolves_worktree_checkout() {
+        let root = PathBuf::from("/Users/me/dev");
+        let event = PathBuf::from("/Users/me/dev/project/feature-worktree/src/lib.rs");
+        assert_eq!(
+            closest_repo(&event, &root, nested_is_repo),
+            Some(PathBuf::from("/Users/me/dev/project/feature-worktree")),
+        );
+    }
+
+    #[test]
+    fn nested_does_not_resolve_internal_worktrees_metadata() {
+        let root = PathBuf::from("/Users/me/dev");
+        let event = PathBuf::from("/Users/me/dev/project/.git/worktrees/feature-worktree/HEAD");
+        // Walks past the metadata dir and lands on the parent checkout.
+        assert_eq!(
+            closest_repo(&event, &root, nested_is_repo),
+            Some(PathBuf::from("/Users/me/dev/project")),
+        );
+    }
+
+    #[test]
+    fn nested_returns_none_outside_root() {
+        let root = PathBuf::from("/Users/me/dev");
+        let event = PathBuf::from("/tmp/elsewhere");
+        assert_eq!(closest_repo(&event, &root, nested_is_repo), None);
+    }
+
+    #[test]
+    fn nested_includes_root_when_root_is_a_repo() {
+        let root = PathBuf::from("/Users/me/dev/project");
+        let event = PathBuf::from("/Users/me/dev/project/README.md");
+        assert_eq!(
+            closest_repo(&event, &root, nested_is_repo),
+            Some(PathBuf::from("/Users/me/dev/project")),
+        );
     }
 
     #[test]

@@ -11,6 +11,7 @@ import {
   getPinnedRepos,
   getRepoOrgs,
   getReposPath,
+  getScanNestedRepos,
   getServiceRepos,
   getServiceUrlTemplate,
   getTerminalApp,
@@ -21,6 +22,7 @@ import {
   setPinnedRepos,
   setRepoOrgs,
   setReposPath,
+  setScanNestedRepos,
   setServiceRepos,
   setServiceUrlTemplate,
   setTerminalApp,
@@ -69,6 +71,7 @@ export function Settings() {
   const [terminalApp, setTerminalAppState] = useState("");
   const [terminalSuggestions, setTerminalSuggestions] = useState<string[]>([]);
   const [checkUpdates, setCheckUpdates] = useState(true);
+  const [scanNested, setScanNested] = useState(false);
   const [demoMode, setDemoModeState] = useState(false);
   const [saved, setSaved] = useState(false);
   const [imported, setImported] = useState(false);
@@ -80,7 +83,7 @@ export function Settings() {
   useEffect(() => {
     (async () => {
       try {
-        const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk, demo] =
+        const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk, nested, demo] =
           await Promise.all([
             getReposPath(),
             getDefaultBranch(),
@@ -91,6 +94,7 @@ export function Settings() {
             getServiceRepos(),
             getTerminalApp(),
             getCheckForUpdates(),
+            getScanNestedRepos(),
             getDemoMode(),
           ]);
         setPath(p);
@@ -103,6 +107,7 @@ export function Settings() {
         setServices(serviceList.map((n) => newServiceRow(n)));
         setTerminalAppState(term);
         setCheckUpdates(chk);
+        setScanNested(nested);
         setDemoModeState(demo);
       } catch (e) {
         showError(e);
@@ -139,6 +144,7 @@ export function Settings() {
         setServiceRepos(serviceList),
         setTerminalApp(terminalApp.trim()),
         setCheckForUpdates(checkUpdates),
+        setScanNestedRepos(scanNested),
         setDemoMode(demoMode),
       ]);
       // Flip the runtime API dispatcher to match. Demo mode toggling off
@@ -221,7 +227,7 @@ export function Settings() {
       const payload = parseImport(text);
       await applyImport(payload);
       // Reload visible state from store so the form reflects what was just imported.
-      const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk] =
+      const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk, nested] =
         await Promise.all([
           getReposPath(),
           getDefaultBranch(),
@@ -232,6 +238,7 @@ export function Settings() {
           getServiceRepos(),
           getTerminalApp(),
           getCheckForUpdates(),
+          getScanNestedRepos(),
         ]);
       setPath(p);
       setFallback(f);
@@ -243,6 +250,7 @@ export function Settings() {
       setServices(serviceList.map((n) => newServiceRow(n)));
       setTerminalAppState(term);
       setCheckUpdates(chk);
+      setScanNested(nested);
       setImported(true);
       setTimeout(() => setImported(false), 1500);
     } catch (e) {
@@ -281,6 +289,24 @@ export function Settings() {
             className={`w-full py-2 ${INPUT_CLS}`}
             placeholder="~/repos"
           />
+          <label className="flex items-start gap-2 cursor-pointer select-none mt-3">
+            <input
+              type="checkbox"
+              checked={scanNested}
+              onChange={(e) => setScanNested(e.currentTarget.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-medium">
+                Scan nested repositories
+              </span>
+              <span className="block text-xs text-neutral-500 mt-0.5">
+                Recursively find Git repositories and worktrees inside this
+                directory, including those nested inside another repo. Off by
+                default — only immediate children are scanned.
+              </span>
+            </span>
+          </label>
         </section>
 
         <section className="mb-8">

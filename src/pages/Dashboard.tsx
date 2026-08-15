@@ -6,6 +6,7 @@ import {
   getEffectivePinnedRepos,
   getRepoOrgs,
   getReposPath,
+  getScanNestedRepos,
   getServiceRepos,
   getServiceUrlTemplate,
   openTerminal,
@@ -52,6 +53,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reposPath, setPath] = useState<string>("");
+  const [scanNested, setScanNested] = useState(false);
   const [showSyncAll, setShowSyncAll] = useState(false);
   const [showClone, setShowClone] = useState(false);
   const [pinnedOrder, setPinnedOrder] = useState<string[]>([]);
@@ -115,10 +117,14 @@ export function Dashboard() {
       // If getReposPath throws we bail before awaiting settingsReads; the
       // no-op catch keeps that from surfacing as an unhandled rejection.
       settingsReads.catch(() => {});
-      const path = await getReposPath();
+      const [path, nested] = await Promise.all([
+        getReposPath(),
+        getScanNestedRepos(),
+      ]);
       setPath(path);
+      setScanNested(nested);
       const [list, [pinned, nextOrgs, tpl, services]] = await Promise.all([
-        api.listRepos(path),
+        api.listRepos(path, nested),
         settingsReads,
       ]);
       setRepos(list);
@@ -224,10 +230,10 @@ export function Dashboard() {
   // get push-style updates instead of relying on the Refresh button.
   useEffect(() => {
     if (!reposPath) return;
-    api.startReposWatcher(reposPath).catch((err) => {
+    api.startReposWatcher(reposPath, scanNested).catch((err) => {
       console.warn("startReposWatcher failed", err);
     });
-  }, [reposPath]);
+  }, [reposPath, scanNested]);
 
   // Listen for repo-changed events emitted by the watcher and re-fetch just
   // the affected repo. Reads the latest repo list via a ref so the listener

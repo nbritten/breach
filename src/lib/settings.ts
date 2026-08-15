@@ -17,6 +17,7 @@ const SERVICE_URL_TEMPLATE_KEY = "serviceUrlTemplate";
 const SERVICE_REPOS_KEY = "serviceRepos";
 const TERMINAL_APP_KEY = "terminalApp";
 const CHECK_FOR_UPDATES_KEY = "checkForUpdates";
+const SCAN_NESTED_REPOS_KEY = "scanNestedRepos";
 const DEMO_MODE_KEY = "demoMode";
 
 export const FALLBACK_DEFAULT_BRANCH = "main";
@@ -118,6 +119,15 @@ export async function getCheckForUpdates(): Promise<boolean> {
 
 export async function setCheckForUpdates(enabled: boolean): Promise<void> {
   await store.set(CHECK_FOR_UPDATES_KEY, enabled);
+  await store.save();
+}
+
+export async function getScanNestedRepos(): Promise<boolean> {
+  return (await store.get<boolean>(SCAN_NESTED_REPOS_KEY)) ?? false;
+}
+
+export async function setScanNestedRepos(enabled: boolean): Promise<void> {
+  await store.set(SCAN_NESTED_REPOS_KEY, enabled);
   await store.save();
 }
 
