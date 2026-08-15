@@ -7,6 +7,7 @@ pub mod shell;
 pub mod sync;
 
 use crate::git;
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use tokio::fs;
@@ -91,6 +92,11 @@ async fn scan_git_repos_nested(root: &Path) -> Result<Vec<PathBuf>, String> {
         candidates.push(root.to_path_buf());
     }
 
+    let mut visited: HashSet<PathBuf> = HashSet::new();
+    if let Ok(canon) = fs::canonicalize(root).await {
+        visited.insert(canon);
+    }
+
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
         let mut entries = match fs::read_dir(&dir).await {
@@ -102,19 +108,27 @@ async fn scan_git_repos_nested(root: &Path) -> Result<Vec<PathBuf>, String> {
             if should_skip_nested_dir(&entry.file_name()) {
                 continue;
             }
-            let file_type = match entry.file_type().await {
-                Ok(t) => t,
+            let path = entry.path();
+            // Follow symlinks, matching the shallow scan: a child that is a
+            // symlink-to-dir with a `.git` entry is a repo, not a hole.
+            let meta = match fs::metadata(&path).await {
+                Ok(m) => m,
                 Err(_) => continue,
             };
-            if !file_type.is_dir() {
+            if !meta.is_dir() {
                 continue;
             }
-            let path = entry.path();
             if git::is_git_repo(&path) {
                 candidates.push(path.clone());
             }
             // Keep walking inside repos so nested checkouts and worktrees
-            // show up independently of their parent.
+            // show up independently of their parent. Canonical paths stop
+            // symlink cycles from looping forever.
+            if let Ok(canon) = fs::canonicalize(&path).await {
+                if !visited.insert(canon) {
+                    continue;
+                }
+            }
             stack.push(path);
         }
     }
@@ -311,6 +325,34 @@ mod tests {
                 PathBuf::from("beta/frontend"),
             ]
         );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_follows_symlink_to_dir_as_repo() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("actual/.git")).unwrap();
+        std::os::unix::fs::symlink(root.join("actual"), root.join("link")).unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
+        assert!(
+            rels.contains(&PathBuf::from("actual")),
+            "real dir should be listed: {rels:?}"
+        );
+        assert!(
+            rels.contains(&PathBuf::from("link")),
+            "symlink-to-dir should be listed like the shallow scan: {rels:?}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_symlink_loop_does_not_hang() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("loop/.git")).unwrap();
+        std::os::unix::fs::symlink(root.join("loop"), root.join("loop/back")).unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        assert!(found.iter().any(|p| p == &root.join("loop")));
         let _ = std::fs::remove_dir_all(&root);
     }
 }
