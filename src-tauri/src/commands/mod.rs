@@ -79,14 +79,6 @@ fn should_skip_nested_dir(name: &OsStr) -> bool {
 }
 
 async fn scan_git_repos_nested(root: &Path) -> Result<Vec<PathBuf>, String> {
-    // Probe the root the same way the shallow scan does so a missing path
-    // stays an empty list rather than an error.
-    match fs::read_dir(root).await {
-        Ok(_) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(format!("cannot read {}: {e}", root.display())),
-    }
-
     let mut candidates = Vec::new();
     if git::is_git_repo(root) {
         candidates.push(root.to_path_buf());
@@ -99,12 +91,25 @@ async fn scan_git_repos_nested(root: &Path) -> Result<Vec<PathBuf>, String> {
 
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
+        let is_root = dir.as_path() == root;
         let mut entries = match fs::read_dir(&dir).await {
             Ok(e) => e,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(e) => return Err(format!("cannot read {}: {e}", dir.display())),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound && is_root => {
+                return Ok(Vec::new());
+            }
+            Err(e) if is_root => {
+                return Err(format!("cannot read {}: {e}", root.display()));
+            }
+            // A nested directory we can't read (permissions, dangling
+            // symlink after metadata raced) must not wipe the whole scan.
+            Err(_) => continue,
         };
-        while let Some(entry) = entries.next_entry().await.map_err(|e| e.to_string())? {
+        loop {
+            let entry = match entries.next_entry().await {
+                Ok(Some(e)) => e,
+                Ok(None) => break,
+                Err(_) => break,
+            };
             if should_skip_nested_dir(&entry.file_name()) {
                 continue;
             }
@@ -353,6 +358,28 @@ mod tests {
         std::os::unix::fs::symlink(root.join("loop"), root.join("loop/back")).unwrap();
         let found = scan_git_repos(&root, true).await.unwrap();
         assert!(found.iter().any(|p| p == &root.join("loop")));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_skips_unreadable_directory() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("visible/.git")).unwrap();
+        let secret = root.join("secret");
+        std::fs::create_dir_all(&secret).unwrap();
+        let mut perms = std::fs::metadata(&secret).unwrap().permissions();
+        perms.set_mode(0o000);
+        std::fs::set_permissions(&secret, perms.clone()).unwrap();
+        let found = scan_git_repos(&root, true).await;
+        perms.set_mode(0o755);
+        let _ = std::fs::set_permissions(&secret, perms);
+        let rels: Vec<PathBuf> = found
+            .expect("unreadable nested dir must not fail the scan")
+            .iter()
+            .map(|p| rel(&root, p))
+            .collect();
+        assert_eq!(rels, vec![PathBuf::from("visible")]);
         let _ = std::fs::remove_dir_all(&root);
     }
 }
