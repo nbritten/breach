@@ -49,15 +49,63 @@ const DEBOUNCE_MS: u64 = 250;
 ///
 /// Nested mode: the closest ancestor that is a git working tree, so a change
 /// inside `project/frontend` refreshes that nested repo rather than the
-/// parent. Paths inside `.git/` walk up to the owning checkout and never
-/// resolve to `.git/worktrees/*` metadata.
+/// parent. Events under `.git/worktrees/<id>/` resolve through Git's `gitdir`
+/// pointer to the linked checkout, not the parent repo that owns the metadata.
 fn repo_for_event(event_path: &Path, repos_root: &Path, nested: bool) -> Option<PathBuf> {
     if nested {
+        if let Some(checkout) = worktree_checkout_for_event(event_path, repos_root) {
+            return Some(checkout);
+        }
         closest_repo(event_path, repos_root, git::is_git_repo)
     } else {
         let rel = event_path.strip_prefix(repos_root).ok()?;
         let first = rel.components().next()?;
         Some(repos_root.join(first.as_os_str()))
+    }
+}
+
+/// Git stores a linked worktree's HEAD/index under
+/// `<repo>/.git/worktrees/<id>/`. The `gitdir` file in that folder points at
+/// the checkout's `.git` file (typically `…/feature-worktree/.git`). Reading
+/// it is how we attribute a gitdir-only event to the card for that checkout.
+fn worktree_gitdir_file(event_path: &Path) -> Option<PathBuf> {
+    let comps: Vec<_> = event_path.components().collect();
+    for i in 0..comps.len().saturating_sub(2) {
+        if comps[i].as_os_str() == ".git" && comps[i + 1].as_os_str() == "worktrees" {
+            let mut meta = PathBuf::new();
+            for c in comps.iter().take(i + 3) {
+                meta.push(c);
+            }
+            return Some(meta.join("gitdir"));
+        }
+    }
+    None
+}
+
+fn checkout_from_worktree_gitdir(gitdir_file: &Path) -> Option<PathBuf> {
+    let raw = std::fs::read_to_string(gitdir_file).ok()?;
+    let pointed = raw.trim();
+    let pointed = pointed
+        .strip_prefix("gitdir:")
+        .map(str::trim)
+        .unwrap_or(pointed);
+    if pointed.is_empty() {
+        return None;
+    }
+    let mut git_file = PathBuf::from(pointed);
+    if git_file.is_relative() {
+        git_file = gitdir_file.parent()?.join(git_file);
+    }
+    git_file.parent().map(PathBuf::from)
+}
+
+fn worktree_checkout_for_event(event_path: &Path, repos_root: &Path) -> Option<PathBuf> {
+    let gitdir_file = worktree_gitdir_file(event_path)?;
+    let checkout = checkout_from_worktree_gitdir(&gitdir_file)?;
+    if checkout == repos_root || checkout.strip_prefix(repos_root).is_ok() {
+        Some(checkout)
+    } else {
+        None
     }
 }
 
@@ -341,11 +389,80 @@ mod tests {
     fn nested_does_not_resolve_internal_worktrees_metadata() {
         let root = PathBuf::from("/Users/me/dev");
         let event = PathBuf::from("/Users/me/dev/project/.git/worktrees/feature-worktree/HEAD");
-        // Walks past the metadata dir and lands on the parent checkout.
+        // Without a gitdir pointer, walk past the metadata dir to the parent
+        // checkout rather than treating the metadata folder as a repo.
         assert_eq!(
             closest_repo(&event, &root, nested_is_repo),
             Some(PathBuf::from("/Users/me/dev/project")),
         );
+    }
+
+    #[test]
+    fn worktree_gitdir_file_from_head_event() {
+        let event = PathBuf::from("/Users/me/dev/project/.git/worktrees/feature-worktree/HEAD");
+        assert_eq!(
+            worktree_gitdir_file(&event),
+            Some(PathBuf::from(
+                "/Users/me/dev/project/.git/worktrees/feature-worktree/gitdir"
+            )),
+        );
+    }
+
+    #[test]
+    fn worktree_gitdir_file_ignores_ordinary_git_paths() {
+        assert_eq!(
+            worktree_gitdir_file(Path::new("/Users/me/dev/project/.git/HEAD")),
+            None,
+        );
+        assert_eq!(
+            worktree_gitdir_file(Path::new("/Users/me/dev/project/src/main.rs")),
+            None,
+        );
+    }
+
+    #[test]
+    fn checkout_from_gitdir_file_absolute() {
+        let dir = std::env::temp_dir().join(format!(
+            "breach-wt-gitdir-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let gitdir = dir.join("gitdir");
+        std::fs::write(&gitdir, "/Users/me/dev/project/feature-worktree/.git\n").unwrap();
+        assert_eq!(
+            checkout_from_worktree_gitdir(&gitdir),
+            Some(PathBuf::from("/Users/me/dev/project/feature-worktree")),
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn nested_worktree_metadata_event_resolves_to_checkout() {
+        let root = std::env::temp_dir().join(format!(
+            "breach-wt-event-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let checkout = root.join("project/feature-worktree");
+        let meta = root.join("project/.git/worktrees/feature-worktree");
+        std::fs::create_dir_all(&checkout).unwrap();
+        std::fs::create_dir_all(&meta).unwrap();
+        std::fs::write(checkout.join(".git"), format!("gitdir: {}\n", meta.display())).unwrap();
+        std::fs::write(meta.join("gitdir"), format!("{}\n", checkout.join(".git").display()))
+            .unwrap();
+        let event = meta.join("HEAD");
+        assert_eq!(
+            repo_for_event(&event, &root, true),
+            Some(checkout),
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
