@@ -8,6 +8,7 @@ import {
   getRepoOrgs,
   getReposPath,
   getScanNestedRepos,
+  getGroupNestedRepos,
   getServiceRepos,
   getServiceUrlTemplate,
   getTerminalApp,
@@ -18,6 +19,7 @@ import {
   setRepoOrgs,
   setReposPath,
   setScanNestedRepos,
+  setGroupNestedRepos,
   setServiceRepos,
   setServiceUrlTemplate,
   setTerminalApp,
@@ -38,6 +40,7 @@ export interface SettingsExport {
     terminalApp: string;
     checkForUpdates: boolean;
     scanNestedRepos: boolean;
+    groupNestedRepos: boolean;
   };
 }
 
@@ -55,6 +58,7 @@ export async function buildExport(): Promise<SettingsExport> {
     terminalApp,
     checkForUpdates,
     scanNestedRepos,
+    groupNestedRepos,
   ] = await Promise.all([
     getReposPath(),
     getDefaultBranch(),
@@ -66,6 +70,7 @@ export async function buildExport(): Promise<SettingsExport> {
     getTerminalApp(),
     getCheckForUpdates(),
     getScanNestedRepos(),
+    getGroupNestedRepos(),
   ]);
   return {
     version: SETTINGS_VERSION,
@@ -80,6 +85,7 @@ export async function buildExport(): Promise<SettingsExport> {
       terminalApp,
       checkForUpdates,
       scanNestedRepos,
+      groupNestedRepos,
     },
   };
 }
@@ -156,6 +162,11 @@ export function parseImport(text: string): SettingsExport {
   if (s.scanNestedRepos !== undefined && typeof s.scanNestedRepos !== "boolean") {
     throw new Error("`scanNestedRepos` must be a boolean");
   }
+  // groupNestedRepos defaults on: it's the nested-scan companion, and a
+  // missing key should match the Settings checkbox's default-checked state.
+  if (s.groupNestedRepos !== undefined && typeof s.groupNestedRepos !== "boolean") {
+    throw new Error("`groupNestedRepos` must be a boolean");
+  }
 
   return {
     version: data.version,
@@ -172,6 +183,8 @@ export function parseImport(text: string): SettingsExport {
         typeof s.checkForUpdates === "boolean" ? s.checkForUpdates : true,
       scanNestedRepos:
         typeof s.scanNestedRepos === "boolean" ? s.scanNestedRepos : false,
+      groupNestedRepos:
+        typeof s.groupNestedRepos === "boolean" ? s.groupNestedRepos : true,
     },
   };
 }
@@ -189,6 +202,7 @@ export async function applyImport(payload: SettingsExport): Promise<void> {
     setTerminalApp(s.terminalApp),
     setCheckForUpdates(s.checkForUpdates),
     setScanNestedRepos(s.scanNestedRepos),
+    setGroupNestedRepos(s.groupNestedRepos),
   ]);
 }
 
@@ -215,6 +229,7 @@ function normalizeSettings(
     terminalApp: s.terminalApp.trim(),
     checkForUpdates: s.checkForUpdates,
     scanNestedRepos: s.scanNestedRepos,
+    groupNestedRepos: s.groupNestedRepos,
   };
 }
 

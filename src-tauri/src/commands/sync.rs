@@ -50,6 +50,7 @@ pub async fn sync_all(
                     .and_then(|n| n.to_str())
                     .map(|n| only_set.contains(n))
                     .unwrap_or(false)
+                    || only_set.contains(&p.to_string_lossy().to_string())
             })
             .collect()
     } else {

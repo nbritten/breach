@@ -296,4 +296,21 @@ mod tests {
         assert_eq!(rels, vec![PathBuf::from("app")]);
         let _ = std::fs::remove_dir_all(&root);
     }
+
+    #[tokio::test]
+    async fn scan_nested_keeps_same_basename_checkouts_distinct() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("acme/frontend/.git")).unwrap();
+        std::fs::create_dir_all(root.join("beta/frontend/.git")).unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
+        assert_eq!(
+            rels,
+            vec![
+                PathBuf::from("acme/frontend"),
+                PathBuf::from("beta/frontend"),
+            ]
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

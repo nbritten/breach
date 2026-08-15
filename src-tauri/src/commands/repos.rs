@@ -19,7 +19,7 @@ pub async fn list_repos(repos_path: String, scan_nested: bool) -> Result<Vec<Rep
         .buffer_unordered(MAX_PARALLEL)
         .collect()
         .await;
-    summaries.sort_by(|a, b| a.name.cmp(&b.name));
+    summaries.sort_by(|a, b| a.name.cmp(&b.name).then(a.path.cmp(&b.path)));
     Ok(summaries)
 }
 

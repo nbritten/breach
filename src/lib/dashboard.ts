@@ -150,11 +150,66 @@ export function filterRepos(repos: RepoSummary[], query: string): RepoSummary[] 
 }
 
 /**
+ * Pin identity for a repo. Basename is used when it's unique among `repos`
+ * (matches typed Settings pins and the historical `pinnedRepos` values).
+ * When two checkouts share a directory name — the nested-scan case — the
+ * full path is the key so pinning one does not pin the other.
+ */
+export function repoPinKey(
+  repo: RepoSummary,
+  repos: readonly RepoSummary[],
+): string {
+  const clash = repos.some((r) => r.name === repo.name && r.path !== repo.path);
+  return clash ? repo.path : repo.name;
+}
+
+export function isRepoPinned(
+  repo: RepoSummary,
+  pinnedOrder: readonly string[],
+): boolean {
+  return pinnedOrder.some((p) => p === repo.path || p === repo.name);
+}
+
+function pinIndex(repo: RepoSummary, pinnedOrder: readonly string[]): number {
+  const byPath = pinnedOrder.indexOf(repo.path);
+  if (byPath >= 0) return byPath;
+  return pinnedOrder.indexOf(repo.name);
+}
+
+/**
+ * Dashboard ordering. Grouped mode sorts by path so a nested checkout sits
+ * next to its parent (`project`, then `project/frontend`) instead of in a
+ * basename pile (`frontend`, `frontend`, `project`). Ungrouped mode is the
+ * historical sort: basename, with path as a tie-breaker so name clashes
+ * stay stable.
+ */
+export function sortRepos(
+  repos: RepoSummary[],
+  groupNested: boolean,
+): RepoSummary[] {
+  const copy = [...repos];
+  if (groupNested) {
+    copy.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  } else {
+    copy.sort((a, b) => {
+      const byName = a.name.localeCompare(b.name);
+      if (byName !== 0) return byName;
+      return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+    });
+  }
+  return copy;
+}
+
+/**
  * Group repos into a Pinned section (ordered per `pinnedOrder`) followed by an
  * Other section for the rest. When no repos are pinned, returns a single
  * unlabeled section containing everything — callers can choose not to render
  * a header for that case. Empty Pinned/Other sections are omitted, so callers
  * never have to render a header over an empty grid.
+ *
+ * Pins match either `name` or `path` so a path-keyed pin from a name clash
+ * doesn't also require the basename, and a legacy name pin still works when
+ * the basename is unique.
  */
 export function groupRepos(
   repos: RepoSummary[],
@@ -163,12 +218,9 @@ export function groupRepos(
   if (pinnedOrder.length === 0) {
     return [{ key: "__all__", label: "", repos }];
   }
-  const pinSet = new Set(pinnedOrder);
-  const pinned = repos.filter((r) => pinSet.has(r.name));
-  pinned.sort(
-    (a, b) => pinnedOrder.indexOf(a.name) - pinnedOrder.indexOf(b.name),
-  );
-  const other = repos.filter((r) => !pinSet.has(r.name));
+  const pinned = repos.filter((r) => isRepoPinned(r, pinnedOrder));
+  pinned.sort((a, b) => pinIndex(a, pinnedOrder) - pinIndex(b, pinnedOrder));
+  const other = repos.filter((r) => !isRepoPinned(r, pinnedOrder));
   const sections: Section[] = [];
   if (pinned.length > 0) {
     sections.push({ key: "__pinned__", label: "Pinned", repos: pinned });

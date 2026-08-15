@@ -28,7 +28,8 @@ interface Props {
   authoredPrs?: PrInfo[];
   reviewPrs?: PrInfo[];
   pinned?: boolean;
-  onTogglePin?: (name: string) => void;
+  onTogglePin?: (key: string) => void;
+  pinKey?: string;
   ci?: CiStatus;
   activeAgents?: ReadonlySet<AgentProvider>;
   docsUrl?: string | null;
@@ -57,6 +58,7 @@ export function RepoCard({
   reviewPrs = [],
   pinned = false,
   onTogglePin,
+  pinKey,
   ci,
   activeAgents,
   docsUrl,
@@ -156,7 +158,7 @@ export function RepoCard({
               onClick={(e: MouseEvent) => {
                 e.preventDefault();
                 e.stopPropagation();
-                onTogglePin(repo.name);
+                onTogglePin(pinKey ?? repo.name);
               }}
               title={pinned ? "Unpin" : "Pin"}
               aria-label={pinned ? "Unpin" : "Pin"}

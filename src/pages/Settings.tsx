@@ -12,6 +12,7 @@ import {
   getRepoOrgs,
   getReposPath,
   getScanNestedRepos,
+  getGroupNestedRepos,
   getServiceRepos,
   getServiceUrlTemplate,
   getTerminalApp,
@@ -23,6 +24,7 @@ import {
   setRepoOrgs,
   setReposPath,
   setScanNestedRepos,
+  setGroupNestedRepos,
   setServiceRepos,
   setServiceUrlTemplate,
   setTerminalApp,
@@ -72,6 +74,7 @@ export function Settings() {
   const [terminalSuggestions, setTerminalSuggestions] = useState<string[]>([]);
   const [checkUpdates, setCheckUpdates] = useState(true);
   const [scanNested, setScanNested] = useState(false);
+  const [groupNested, setGroupNested] = useState(true);
   const [demoMode, setDemoModeState] = useState(false);
   const [saved, setSaved] = useState(false);
   const [imported, setImported] = useState(false);
@@ -83,7 +86,7 @@ export function Settings() {
   useEffect(() => {
     (async () => {
       try {
-        const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk, nested, demo] =
+        const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk, nested, group, demo] =
           await Promise.all([
             getReposPath(),
             getDefaultBranch(),
@@ -95,6 +98,7 @@ export function Settings() {
             getTerminalApp(),
             getCheckForUpdates(),
             getScanNestedRepos(),
+            getGroupNestedRepos(),
             getDemoMode(),
           ]);
         setPath(p);
@@ -108,6 +112,7 @@ export function Settings() {
         setTerminalAppState(term);
         setCheckUpdates(chk);
         setScanNested(nested);
+        setGroupNested(group);
         setDemoModeState(demo);
       } catch (e) {
         showError(e);
@@ -145,6 +150,7 @@ export function Settings() {
         setTerminalApp(terminalApp.trim()),
         setCheckForUpdates(checkUpdates),
         setScanNestedRepos(scanNested),
+        setGroupNestedRepos(groupNested),
         setDemoMode(demoMode),
       ]);
       // Flip the runtime API dispatcher to match. Demo mode toggling off
@@ -227,7 +233,7 @@ export function Settings() {
       const payload = parseImport(text);
       await applyImport(payload);
       // Reload visible state from store so the form reflects what was just imported.
-      const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk, nested] =
+      const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk, nested, group] =
         await Promise.all([
           getReposPath(),
           getDefaultBranch(),
@@ -239,6 +245,7 @@ export function Settings() {
           getTerminalApp(),
           getCheckForUpdates(),
           getScanNestedRepos(),
+          getGroupNestedRepos(),
         ]);
       setPath(p);
       setFallback(f);
@@ -251,6 +258,7 @@ export function Settings() {
       setTerminalAppState(term);
       setCheckUpdates(chk);
       setScanNested(nested);
+      setGroupNested(group);
       setImported(true);
       setTimeout(() => setImported(false), 1500);
     } catch (e) {
@@ -293,7 +301,11 @@ export function Settings() {
             <input
               type="checkbox"
               checked={scanNested}
-              onChange={(e) => setScanNested(e.currentTarget.checked)}
+              onChange={(e) => {
+                const on = e.currentTarget.checked;
+                setScanNested(on);
+                if (on) setGroupNested(true);
+              }}
               className="mt-0.5"
             />
             <span>
@@ -304,6 +316,28 @@ export function Settings() {
                 Recursively find Git repositories and worktrees inside this
                 directory, including those nested inside another repo. Off by
                 default — only immediate children are scanned.
+              </span>
+            </span>
+          </label>
+          <label
+            className={`flex items-start gap-2 select-none mt-3 ml-6 ${
+              scanNested ? "cursor-pointer" : "opacity-50 cursor-not-allowed"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={groupNested}
+              disabled={!scanNested}
+              onChange={(e) => setGroupNested(e.currentTarget.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-medium">
+                Group nested repositories
+              </span>
+              <span className="block text-xs text-neutral-500 mt-0.5">
+                Sort nested checkouts next to their parent folder. Turn off to
+                sort by repository name. Available when nested scanning is on.
               </span>
             </span>
           </label>

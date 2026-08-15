@@ -18,6 +18,7 @@ const SERVICE_REPOS_KEY = "serviceRepos";
 const TERMINAL_APP_KEY = "terminalApp";
 const CHECK_FOR_UPDATES_KEY = "checkForUpdates";
 const SCAN_NESTED_REPOS_KEY = "scanNestedRepos";
+const GROUP_NESTED_REPOS_KEY = "groupNestedRepos";
 const DEMO_MODE_KEY = "demoMode";
 
 export const FALLBACK_DEFAULT_BRANCH = "main";
@@ -128,6 +129,15 @@ export async function getScanNestedRepos(): Promise<boolean> {
 
 export async function setScanNestedRepos(enabled: boolean): Promise<void> {
   await store.set(SCAN_NESTED_REPOS_KEY, enabled);
+  await store.save();
+}
+
+export async function getGroupNestedRepos(): Promise<boolean> {
+  return (await store.get<boolean>(GROUP_NESTED_REPOS_KEY)) ?? true;
+}
+
+export async function setGroupNestedRepos(enabled: boolean): Promise<void> {
+  await store.set(GROUP_NESTED_REPOS_KEY, enabled);
   await store.save();
 }
 

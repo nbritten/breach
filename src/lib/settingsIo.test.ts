@@ -14,6 +14,7 @@ const validPayload: SettingsExport = {
     terminalApp: "Ghostty",
     checkForUpdates: true,
     scanNestedRepos: false,
+    groupNestedRepos: true,
   },
 };
 
@@ -116,5 +117,29 @@ describe("parseImport", () => {
       settings: { ...validPayload.settings, scanNestedRepos: "yes" },
     };
     expect(() => parseImport(JSON.stringify(bad))).toThrow(/scanNestedRepos/);
+  });
+
+  it("treats a missing groupNestedRepos as true (nested grouping defaults on)", () => {
+    const { groupNestedRepos: _g, ...withoutFlag } = validPayload.settings;
+    const old = { ...validPayload, settings: withoutFlag };
+    const parsed = parseImport(JSON.stringify(old));
+    expect(parsed.settings.groupNestedRepos).toBe(true);
+  });
+
+  it("accepts groupNestedRepos false", () => {
+    const payload = {
+      ...validPayload,
+      settings: { ...validPayload.settings, groupNestedRepos: false },
+    };
+    const parsed = parseImport(JSON.stringify(payload));
+    expect(parsed.settings.groupNestedRepos).toBe(false);
+  });
+
+  it("rejects a non-boolean groupNestedRepos", () => {
+    const bad = {
+      ...validPayload,
+      settings: { ...validPayload.settings, groupNestedRepos: "yes" },
+    };
+    expect(() => parseImport(JSON.stringify(bad))).toThrow(/groupNestedRepos/);
   });
 });

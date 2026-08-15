@@ -7,6 +7,7 @@ import {
   getRepoOrgs,
   getReposPath,
   getScanNestedRepos,
+  getGroupNestedRepos,
   getServiceRepos,
   getServiceUrlTemplate,
   openTerminal,
@@ -40,6 +41,9 @@ import {
   filterByChips,
   filterRepos,
   groupRepos,
+  isRepoPinned,
+  repoPinKey,
+  sortRepos,
   REPO_FILTER_ORDER,
   repoFilterLabel,
   repoFilterCounts,
@@ -54,6 +58,7 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [reposPath, setPath] = useState<string>("");
   const [scanNested, setScanNested] = useState(false);
+  const [groupNested, setGroupNested] = useState(true);
   const [showSyncAll, setShowSyncAll] = useState(false);
   const [showClone, setShowClone] = useState(false);
   const [pinnedOrder, setPinnedOrder] = useState<string[]>([]);
@@ -117,12 +122,14 @@ export function Dashboard() {
       // If getReposPath throws we bail before awaiting settingsReads; the
       // no-op catch keeps that from surfacing as an unhandled rejection.
       settingsReads.catch(() => {});
-      const [path, nested] = await Promise.all([
+      const [path, nested, group] = await Promise.all([
         getReposPath(),
         getScanNestedRepos(),
+        getGroupNestedRepos(),
       ]);
       setPath(path);
       setScanNested(nested);
+      setGroupNested(group);
       const [list, [pinned, nextOrgs, tpl, services]] = await Promise.all([
         api.listRepos(path, nested),
         settingsReads,
@@ -297,14 +304,19 @@ export function Dashboard() {
       return next;
     });
 
+  const orderedRepos = useMemo(
+    () => sortRepos(repos, scanNested && groupNested),
+    [repos, scanNested, groupNested],
+  );
+
   // Counts come from the search-filtered set, not the chip-filtered set, so
   // the count next to "Dirty" is "dirty among repos matching your search",
   // not "dirty among repos already filtered by other active chips" (which
   // would create weird interactions where activating Behind shrinks the Dirty
   // count).
   const searchFiltered = useMemo(
-    () => filterRepos(repos, query),
-    [repos, query],
+    () => filterRepos(orderedRepos, query),
+    [orderedRepos, query],
   );
 
   const filterCounts = useMemo(
@@ -511,8 +523,9 @@ export function Dashboard() {
                           onRefresh={refreshOne}
                           authoredPrs={prs.authored[r.name] ?? EMPTY_PRS}
                           reviewPrs={prs.review_requested[r.name] ?? EMPTY_PRS}
-                          pinned={pinnedOrder.includes(r.name)}
+                          pinned={isRepoPinned(r, pinnedOrder)}
                           onTogglePin={togglePin}
+                          pinKey={repoPinKey(r, repos)}
                           ci={ciByPath[r.path]}
                           activeAgents={agentsByPath[r.path]}
                           docsUrl={
