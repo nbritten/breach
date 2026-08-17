@@ -42,8 +42,9 @@ pub fn expand(path: &str) -> PathBuf {
 /// linked worktrees (`.git` file). Git's internal `.git/worktrees/*` metadata
 /// is never surfaced. Build and package directories (`node_modules`, `target`,
 /// …) are not descended into (a checkout with those names is still listed),
-/// and the walk stops at [`NESTED_SCAN_MAX_DEPTH`] so a mis-pointed scan of
-/// `$HOME` cannot crawl forever.
+/// and the walk stops at [`NESTED_SCAN_MAX_DEPTH`]. Skip names also cover
+/// home-directory trees (`Library`, `.npm`, `Applications`) so a repos path
+/// of `$HOME` does not crawl caches and apps.
 ///
 /// Sorted by path for deterministic ordering. Empty Vec if the directory
 /// doesn't exist — the dashboard's empty state is a better surface for "you
@@ -81,8 +82,9 @@ fn should_skip_nested_dir(name: &OsStr) -> bool {
 }
 
 /// Depth 0 is the configured repos path. Depth 8 covers
-/// `~/dev/org/project/nested` with room to spare without walking a whole home
-/// directory if someone points the setting at `$HOME`.
+/// `~/dev/org/project/nested` with room to spare. Combined with the skip
+/// list this keeps a mis-pointed scan of `$HOME` from walking Library,
+/// package caches, and Applications.
 pub(crate) const NESTED_SCAN_MAX_DEPTH: usize = 8;
 
 /// Directories that are never descended into during a nested scan.
@@ -108,6 +110,18 @@ const NESTED_SCAN_SKIP: &[&str] = &[
     ".turbo",
     ".parcel-cache",
     ".svelte-kit",
+    ".gradle",
+    ".yarn",
+    "bower_components",
+    ".tox",
+    "site-packages",
+    ".Trash",
+    "Library",
+    ".npm",
+    ".cargo",
+    ".rustup",
+    ".local",
+    "Applications",
 ];
 
 async fn scan_git_repos_nested(root: &Path) -> Result<Vec<PathBuf>, String> {
@@ -365,6 +379,17 @@ mod tests {
         let root = unique_temp_dir();
         std::fs::create_dir_all(root.join("app/.git")).unwrap();
         std::fs::create_dir_all(root.join("app/target/debug/.git")).unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
+        assert_eq!(rels, vec![PathBuf::from("app")]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_skips_home_library_dir() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("app/.git")).unwrap();
+        std::fs::create_dir_all(root.join("Library/Caches/foo/.git")).unwrap();
         let found = scan_git_repos(&root, true).await.unwrap();
         let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
         assert_eq!(rels, vec![PathBuf::from("app")]);
