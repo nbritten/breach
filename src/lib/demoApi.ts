@@ -103,6 +103,8 @@ export const demoApi = {
   defaultReposPath: async (): Promise<string> => "/Users/demo/repos",
   homeRelative: async (path: string): Promise<string> =>
     path.replace(/^\/Users\/demo/, "~"),
+  expandPath: async (path: string): Promise<string> =>
+    path.replace(/^~/, "/Users/demo"),
   // No-op: there's no real filesystem to watch in demo mode.
   startReposWatcher: async (
     _reposPath: string,

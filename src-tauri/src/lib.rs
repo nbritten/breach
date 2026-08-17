@@ -92,6 +92,7 @@ pub fn run() {
             commands::repos::repo_discard_all,
             commands::repos::default_repos_path,
             commands::repos::home_relative,
+            commands::repos::expand_path,
             commands::sync::sync_all,
             commands::sync::repo_sync_to_default,
             commands::gh::list_missing_repos,

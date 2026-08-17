@@ -81,6 +81,12 @@ pub fn home_relative(path: String) -> String {
     home_relative_with_home(&path, dirs::home_dir())
 }
 
+/// Expand a leading `~` to the home directory. Absolute paths are unchanged.
+#[tauri::command]
+pub fn expand_path(path: String) -> String {
+    expand(&path).to_string_lossy().into_owned()
+}
+
 pub(crate) fn home_relative_with_home(path: &str, home: Option<PathBuf>) -> String {
     let Some(home) = home else { return path.to_string() };
     let Some(home_str) = home.to_str() else { return path.to_string() };

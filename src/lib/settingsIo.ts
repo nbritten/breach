@@ -77,11 +77,11 @@ export async function buildExport(): Promise<SettingsExport> {
     settings: {
       reposPath: await api.homeRelative(reposPath),
       defaultBranch,
-      branchOverrides,
+      branchOverrides: await homeRelativeKeys(branchOverrides),
       repoOrgs,
-      pinnedRepos,
+      pinnedRepos: await Promise.all(pinnedRepos.map(homeRelativeIfPath)),
       serviceUrlTemplate,
-      serviceRepos,
+      serviceRepos: await Promise.all(serviceRepos.map(homeRelativeIfPath)),
       terminalApp,
       checkForUpdates,
       scanNestedRepos,
@@ -243,4 +243,23 @@ function isStringArray(v: unknown): v is string[] {
 
 function isStringMap(v: unknown): v is Record<string, string> {
   return isObject(v) && Object.values(v).every((x) => typeof x === "string");
+}
+
+/** Absolute or `~/…` identity keys become home-relative in an export. */
+export function isPortableFsPath(s: string): boolean {
+  return s.startsWith("~") || s.startsWith("/");
+}
+
+async function homeRelativeIfPath(s: string): Promise<string> {
+  return isPortableFsPath(s) ? api.homeRelative(s) : s;
+}
+
+async function homeRelativeKeys(
+  map: Record<string, string>,
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(map)) {
+    out[await homeRelativeIfPath(k)] = v;
+  }
+  return out;
 }

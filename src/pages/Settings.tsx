@@ -457,7 +457,7 @@ export function Settings() {
 
         <SettingsSection
           label="Pinned repos"
-          description="Local repo names to pin at the top of the dashboard, above team sections."
+          description="Repos to pin at the top of the dashboard. Use the directory name when it is unique, or the full checkout path when two repos share a name. Paths round-trip through Export as ~/…."
           onAdd={addPinRow}
           itemCount={pins.length}
           emptyLabel="No pinned repos. Click + Add to pin one."

@@ -77,6 +77,7 @@ const real = {
   listTerminalApps: () => invoke<string[]>("list_terminal_apps"),
   defaultReposPath: () => invoke<string>("default_repos_path"),
   homeRelative: (path: string) => invoke<string>("home_relative", { path }),
+  expandPath: (path: string) => invoke<string>("expand_path", { path }),
   startReposWatcher: (reposPath: string, scanNested: boolean) =>
     invoke<void>("start_repos_watcher", { reposPath, scanNested }),
 };
