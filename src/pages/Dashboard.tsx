@@ -41,6 +41,7 @@ import {
   filterRepos,
   groupRepos,
   isRepoPinned,
+  matchesIdentityKey,
   prsForRepo,
   repoPinKey,
   repoPathLabel,
@@ -530,7 +531,7 @@ export function Dashboard() {
                           ci={ciByPath[r.path]}
                           activeAgents={agentsByPath[r.path]}
                           docsUrl={
-                            serviceSet.has(r.name)
+                            matchesIdentityKey(r, [...serviceSet], repos)
                               ? buildServiceUrl(serviceTpl, r.name)
                               : null
                           }

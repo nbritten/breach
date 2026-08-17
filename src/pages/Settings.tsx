@@ -482,7 +482,7 @@ export function Settings() {
               Repos that expose a docs page. Each listed repo gets a "Docs" button on its
               card that opens the URL with{" "}
               <code className="text-neutral-300">{"{name}"}</code> replaced by the repo's
-              directory name.
+              directory name. Use a full path when two checkouts share that name.
             </>
           }
           onAdd={addServiceRow}
