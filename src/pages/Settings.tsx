@@ -301,11 +301,7 @@ export function Settings() {
             <input
               type="checkbox"
               checked={scanNested}
-              onChange={(e) => {
-                const on = e.currentTarget.checked;
-                setScanNested(on);
-                if (on) setGroupNested(true);
-              }}
+              onChange={(e) => setScanNested(e.currentTarget.checked)}
               className="mt-0.5"
             />
             <span>
