@@ -7,6 +7,7 @@ import { Modal } from "./Modal";
 
 interface Props {
   reposPath: string;
+  scanNested: boolean;
   onClose: () => void;
 }
 
@@ -21,7 +22,7 @@ const STATUS_CONFIG: Record<
 
 type Phase = "listing" | "picking" | "cloning" | "done";
 
-export function CloneMissingModal({ reposPath, onClose }: Props) {
+export function CloneMissingModal({ reposPath, scanNested, onClose }: Props) {
   const [phase, setPhase] = useState<Phase>("listing");
   const [candidates, setCandidates] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -39,14 +40,14 @@ export function CloneMissingModal({ reposPath, onClose }: Props) {
           setPhase("picking");
           return;
         }
-        const slugs = await api.listMissingRepos(reposPath, orgs);
+        const slugs = await api.listMissingRepos(reposPath, orgs, scanNested);
         setCandidates(slugs);
         setPhase("picking");
       } catch (e) {
         setError(errorText(e));
       }
     })();
-  }, [reposPath]);
+  }, [reposPath, scanNested]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();

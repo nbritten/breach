@@ -61,6 +61,7 @@ export const demoApi = {
   listMissingRepos: async (
     _reposPath: string,
     _orgs: string[],
+    _scanNested: boolean,
   ): Promise<string[]> => [],
   cloneRepos: async (
     _reposPath: string,

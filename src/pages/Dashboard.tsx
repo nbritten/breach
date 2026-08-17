@@ -559,6 +559,7 @@ export function Dashboard() {
       {showClone && (
         <CloneMissingModal
           reposPath={reposPath}
+          scanNested={scanNested}
           onClose={() => {
             setShowClone(false);
             refresh();

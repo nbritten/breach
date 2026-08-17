@@ -3,11 +3,11 @@ use futures::future::join_all;
 use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::process::Command;
 
-use super::{expand, MAX_PARALLEL};
+use super::{expand, scan_git_repos, MAX_PARALLEL};
 
 pub(crate) async fn gh_available() -> bool {
     Command::new("gh")
@@ -338,15 +338,20 @@ async fn list_org_repos(org: &str) -> Result<Vec<String>, String> {
 ///
 /// If `repos_path` doesn't exist yet, every repo in the org is "missing" — the
 /// directory is created lazily by `clone_repos` once the user picks something.
+///
+/// `scan_nested` uses the same scan as the dashboard: a nested checkout whose
+/// directory name matches an org repo counts as already cloned.
 #[tauri::command]
 pub async fn list_missing_repos(
     repos_path: String,
     orgs: Vec<String>,
+    scan_nested: bool,
 ) -> Result<Vec<String>, String> {
     if !gh_available().await {
         return Err("gh CLI not found. Install with: brew install gh && gh auth login".into());
     }
     let root = expand(&repos_path);
+    let cloned = scan_git_repos(&root, scan_nested).await?;
 
     let mut slugs: Vec<String> = Vec::new();
     for org in orgs.iter().map(|s| s.trim()).filter(|s| !s.is_empty()) {
@@ -354,7 +359,7 @@ pub async fn list_missing_repos(
             .await
             .map_err(|e| format!("listing org {org}: {e}"))?;
         for n in names {
-            if !root.join(&n).exists() {
+            if !is_locally_present(&n, &root, &cloned, scan_nested) {
                 slugs.push(format!("{org}/{n}"));
             }
         }
@@ -362,6 +367,23 @@ pub async fn list_missing_repos(
     slugs.sort();
     slugs.dedup();
     Ok(slugs)
+}
+
+/// A name is present at the configured root (shallow or nested), or — when
+/// nested scanning is on — as the basename of any discovered checkout.
+pub(crate) fn is_locally_present(
+    name: &str,
+    root: &Path,
+    cloned: &[PathBuf],
+    scan_nested: bool,
+) -> bool {
+    if root.join(name).exists() {
+        return true;
+    }
+    scan_nested
+        && cloned
+            .iter()
+            .any(|p| p.file_name().and_then(|n| n.to_str()) == Some(name))
 }
 
 /// Clone the given `org/name` slugs into `repos_path` in parallel. The caller is
@@ -443,4 +465,18 @@ pub async fn clone_repos(
         .collect()
         .await;
     Ok(results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nested_present_if_basename_cloned() {
+        let root = Path::new("/this/path/should/not/exist/by/any/chance");
+        let cloned = vec![PathBuf::from("/dev/acme/frontend")];
+        assert!(is_locally_present("frontend", root, &cloned, true));
+        assert!(!is_locally_present("frontend", root, &cloned, false));
+        assert!(!is_locally_present("api", root, &cloned, true));
+    }
 }

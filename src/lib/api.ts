@@ -60,8 +60,8 @@ const real = {
       onlyRepos,
       scanNested,
     }),
-  listMissingRepos: (reposPath: string, orgs: string[]) =>
-    invoke<string[]>("list_missing_repos", { reposPath, orgs }),
+  listMissingRepos: (reposPath: string, orgs: string[], scanNested: boolean) =>
+    invoke<string[]>("list_missing_repos", { reposPath, orgs, scanNested }),
   cloneRepos: (reposPath: string, slugs: string[]) =>
     invoke<CloneResult[]>("clone_repos", { reposPath, slugs }),
   listMyPrs: (orgs: string[]) => invoke<MyPrs>("list_my_prs", { orgs }),
