@@ -244,6 +244,13 @@ describe("sortRepos", () => {
       "/dev/beta/frontend",
     ]);
   });
+
+  it("keeps a prefix sibling from sorting between a parent and its child", () => {
+    const tools = repo("acme-tools", "main", "/dev/acme-tools");
+    expect(
+      sortRepos([tools, acmeFront, acme], true).map((r) => r.path),
+    ).toEqual(["/dev/acme", "/dev/acme/frontend", "/dev/acme-tools"]);
+  });
 });
 
 describe("prsForRepo", () => {

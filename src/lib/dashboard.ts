@@ -277,11 +277,12 @@ function pinIndex(
 }
 
 /**
- * Dashboard ordering. Grouped mode sorts by path so a nested checkout sits
- * next to its parent (`project`, then `project/frontend`) instead of in a
- * basename pile (`frontend`, `frontend`, `project`). Ungrouped mode is the
- * historical sort: basename, with path as a tie-breaker so name clashes
- * stay stable.
+ * Dashboard ordering. Grouped mode sorts by path *components* so a nested
+ * checkout sits next to its parent (`project`, then `project/frontend`)
+ * instead of in a basename pile, and so a sibling like `acme-tools` cannot
+ * sort between `acme` and `acme/frontend` the way a raw string sort would.
+ * Ungrouped mode is the historical sort: basename, with path as a
+ * tie-breaker so name clashes stay stable.
  */
 export function sortRepos(
   repos: RepoSummary[],
@@ -289,15 +290,26 @@ export function sortRepos(
 ): RepoSummary[] {
   const copy = [...repos];
   if (groupNested) {
-    copy.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+    copy.sort((a, b) => comparePathTree(a.path, b.path));
   } else {
     copy.sort((a, b) => {
       const byName = a.name.localeCompare(b.name);
       if (byName !== 0) return byName;
-      return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+      return comparePathTree(a.path, b.path);
     });
   }
   return copy;
+}
+
+function comparePathTree(a: string, b: string): number {
+  const as = pathParts(a);
+  const bs = pathParts(b);
+  const n = Math.min(as.length, bs.length);
+  for (let i = 0; i < n; i++) {
+    if (as[i] === bs[i]) continue;
+    return as[i] < bs[i] ? -1 : 1;
+  }
+  return as.length - bs.length;
 }
 
 /**
