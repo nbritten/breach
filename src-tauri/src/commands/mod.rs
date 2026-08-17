@@ -117,6 +117,7 @@ async fn scan_git_repos_nested(root: &Path) -> Result<Vec<PathBuf>, String> {
     }
 
     let mut visited: HashSet<PathBuf> = HashSet::new();
+    visited.insert(root.to_path_buf());
     if let Ok(canon) = fs::canonicalize(root).await {
         visited.insert(canon);
     }
@@ -167,7 +168,11 @@ async fn scan_git_repos_nested(root: &Path) -> Result<Vec<PathBuf>, String> {
             }
             // Keep walking inside repos so nested checkouts and worktrees
             // show up independently of their parent. Canonical paths stop
-            // symlink cycles from looping forever.
+            // symlink cycles; the non-canonical path is recorded too so a
+            // canonicalize failure cannot restack the same directory.
+            if !visited.insert(path.clone()) {
+                continue;
+            }
             if let Ok(canon) = fs::canonicalize(&path).await {
                 if !visited.insert(canon) {
                     continue;
