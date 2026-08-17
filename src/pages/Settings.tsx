@@ -417,7 +417,7 @@ export function Settings() {
 
         <SettingsSection
           label="Branch overrides"
-          description="Per-repo branch used instead of the default when syncing. Repo name matches the directory name under your repos path."
+          description="Per-repo branch used instead of the default when syncing. Use the directory name when it is unique, or the full checkout path when two repos share a name."
           onAdd={addRow}
           itemCount={rows.length}
           emptyLabel={
@@ -441,7 +441,7 @@ export function Settings() {
               <input
                 value={r.name}
                 onChange={(e) => updateRow(r.id, { name: e.currentTarget.value })}
-                placeholder="my-repo"
+                placeholder="my-repo or /full/path"
                 className={INPUT_CLS}
               />
               <input

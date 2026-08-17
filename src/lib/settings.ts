@@ -189,6 +189,8 @@ export function branchForRepo(
   repoName: string,
   overrides: Record<string, string>,
   defaultBranch: string,
+  repoPath?: string,
 ): string {
+  if (repoPath && overrides[repoPath]) return overrides[repoPath];
   return overrides[repoName] ?? defaultBranch;
 }

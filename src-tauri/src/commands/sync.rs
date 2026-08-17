@@ -25,7 +25,8 @@ pub struct SyncResult {
 
 /// For each repo under `repos_path` (optionally filtered by `only_repos`), fast-forward its
 /// default branch from origin. Dirty repos are skipped without attempting to sync. Branch
-/// is resolved from `branch_overrides` (by repo name) or falls back to `default_branch`.
+/// is resolved from `branch_overrides` (by full path, then by repo name when that
+/// name is unique among the repos being synced) or falls back to `default_branch`.
 /// `scan_nested` is forwarded to the same scan `list_repos` uses so Sync visits
 /// every repo the dashboard is showing.
 #[tauri::command]
@@ -57,17 +58,29 @@ pub async fn sync_all(
         candidates
     };
 
+    let mut name_counts: HashMap<String, usize> = HashMap::new();
+    for p in &filtered {
+        if let Some(n) = p.file_name().and_then(|n| n.to_str()) {
+            *name_counts.entry(n.to_string()).or_default() += 1;
+        }
+    }
+
     let futures = filtered.into_iter().map(|p| {
         let overrides = branch_overrides.clone();
         let fallback = default_branch.clone();
+        let name_unique = p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(|n| name_counts.get(n).copied().unwrap_or(0) <= 1)
+            .unwrap_or(false);
         async move {
             let name = p
                 .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("?")
                 .to_string();
-            let branch = overrides.get(&name).cloned().unwrap_or(fallback);
             let path_str = p.to_string_lossy().to_string();
+            let branch = resolve_sync_branch(&name, &path_str, &overrides, &fallback, name_unique);
 
             match git::is_dirty(&p).await {
                 Ok(true) => {
@@ -124,4 +137,73 @@ pub async fn repo_sync_to_default(repo_path: String, branch: String) -> Result<S
     let path = PathBuf::from(&repo_path);
     git::sync_to_default(&path, &branch).await?;
     Ok(branch)
+}
+
+/// Path override always wins. A basename override applies only when that
+/// name is unique among the repos being synced, so two `frontend` checkouts
+/// do not share one `develop` override.
+pub(crate) fn resolve_sync_branch(
+    name: &str,
+    path: &str,
+    overrides: &HashMap<String, String>,
+    fallback: &str,
+    name_unique: bool,
+) -> String {
+    if let Some(branch) = overrides.get(path) {
+        return branch.clone();
+    }
+    if name_unique {
+        if let Some(branch) = overrides.get(name) {
+            return branch.clone();
+        }
+    }
+    fallback.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn overrides() -> HashMap<String, String> {
+        HashMap::from([
+            ("frontend".into(), "develop".into()),
+            ("/dev/acme/frontend".into(), "release".into()),
+        ])
+    }
+
+    #[test]
+    fn path_override_wins() {
+        assert_eq!(
+            resolve_sync_branch(
+                "frontend",
+                "/dev/acme/frontend",
+                &overrides(),
+                "main",
+                false,
+            ),
+            "release"
+        );
+    }
+
+    #[test]
+    fn name_override_applies_when_unique() {
+        assert_eq!(
+            resolve_sync_branch("frontend", "/dev/solo/frontend", &overrides(), "main", true),
+            "develop"
+        );
+    }
+
+    #[test]
+    fn name_override_skipped_when_names_clash() {
+        assert_eq!(
+            resolve_sync_branch(
+                "frontend",
+                "/dev/beta/frontend",
+                &overrides(),
+                "main",
+                false,
+            ),
+            "main"
+        );
+    }
 }
