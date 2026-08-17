@@ -451,6 +451,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn scan_nested_skips_git_submodules() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("project/.git/modules/vendor-lib")).unwrap();
+        std::fs::create_dir_all(root.join("project/vendor-lib")).unwrap();
+        std::fs::write(
+            root.join("project/vendor-lib/.git"),
+            "gitdir: ../.git/modules/vendor-lib\n",
+        )
+        .unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
+        assert_eq!(rels, vec![PathBuf::from("project")]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
     async fn scan_nested_skips_unreadable_directory() {
         use std::os::unix::fs::PermissionsExt;
         let root = unique_temp_dir();

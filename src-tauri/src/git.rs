@@ -46,7 +46,11 @@ pub async fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
 }
 
 /// A directory counts as a git repo iff it has a `.git` entry: a directory in
-/// normal clones, a gitdir-pointer file in linked worktrees and submodules.
+/// normal clones, a gitdir-pointer file in linked worktrees.
+/// Git submodules also use a `.git` file, but it points at `.git/modules/…`
+/// inside the parent — those are not independent checkouts and must not
+/// become dashboard cards or Sync targets.
+///
 /// We deliberately don't fall back to `git rev-parse --is-inside-work-tree` —
 /// that spawned a process for every non-repo directory on every scan, and it
 /// answers the wrong question anyway: it's true for any directory nested
@@ -60,7 +64,33 @@ pub fn is_git_repo(path: &Path) -> bool {
     if path_is_inside_git_dir(path) {
         return false;
     }
-    path.join(".git").exists()
+    let git_entry = path.join(".git");
+    if git_entry.is_dir() {
+        return true;
+    }
+    if git_entry.is_file() {
+        return !git_file_points_at_submodule(&git_entry);
+    }
+    false
+}
+
+fn git_file_points_at_submodule(git_file: &Path) -> bool {
+    let Ok(raw) = std::fs::read_to_string(git_file) else {
+        return false;
+    };
+    gitdir_points_at_submodule(&raw)
+}
+
+/// True when a `.git` gitfile's `gitdir:` pointer targets the parent's
+/// `.git/modules/` directory (a submodule), not a linked worktree.
+pub(crate) fn gitdir_points_at_submodule(contents: &str) -> bool {
+    let pointed = contents.trim();
+    let pointed = pointed
+        .strip_prefix("gitdir:")
+        .map(str::trim)
+        .unwrap_or(pointed);
+    let normalized = pointed.replace('\\', "/");
+    normalized.contains("/.git/modules/") || normalized.contains(".git/modules/")
 }
 
 /// True when `path` has a `.git` path component — i.e. it lives inside Git's
@@ -396,5 +426,29 @@ mod tests {
         assert!(!is_git_repo(&meta));
         assert!(path_is_inside_git_dir(&meta));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_git_repo_rejects_submodule_gitfile() {
+        let dir = unique_temp_dir();
+        std::fs::write(dir.join(".git"), "gitdir: ../.git/modules/vendor-lib\n").unwrap();
+        assert!(!is_git_repo(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn gitdir_points_at_submodule_detects_relative_and_absolute() {
+        assert!(gitdir_points_at_submodule(
+            "gitdir: ../.git/modules/vendor-lib\n"
+        ));
+        assert!(gitdir_points_at_submodule(
+            "gitdir: /Users/me/proj/.git/modules/foo"
+        ));
+        assert!(!gitdir_points_at_submodule(
+            "gitdir: /Users/me/proj/.git/worktrees/wt\n"
+        ));
+        assert!(!gitdir_points_at_submodule(
+            "gitdir: /tmp/repo/.git/worktrees/wt"
+        ));
     }
 }
