@@ -41,8 +41,9 @@ pub fn expand(path: &str) -> PathBuf {
 /// configured root if it is itself a repo, parent repos, nested repos, and
 /// linked worktrees (`.git` file). Git's internal `.git/worktrees/*` metadata
 /// is never surfaced. Build and package directories (`node_modules`, `target`,
-/// …) are skipped, and the walk stops at [`NESTED_SCAN_MAX_DEPTH`] so a
-/// mis-pointed scan of `$HOME` cannot crawl forever.
+/// …) are not descended into (a checkout with those names is still listed),
+/// and the walk stops at [`NESTED_SCAN_MAX_DEPTH`] so a mis-pointed scan of
+/// `$HOME` cannot crawl forever.
 ///
 /// Sorted by path for deterministic ordering. Empty Vec if the directory
 /// doesn't exist — the dashboard's empty state is a better surface for "you
@@ -84,10 +85,10 @@ fn should_skip_nested_dir(name: &OsStr) -> bool {
 /// directory if someone points the setting at `$HOME`.
 pub(crate) const NESTED_SCAN_MAX_DEPTH: usize = 8;
 
-/// Directories that are never nested-scan candidates and never descended into.
+/// Directories that are never descended into during a nested scan.
 /// `.git` is Git metadata (including `worktrees/`). The rest are package/build
-/// trees that can dwarf the source and almost never hold a checkout the
-/// dashboard should show.
+/// trees that can dwarf the source. If one of those names *is* itself a
+/// checkout, it is still listed — we just do not walk inside it.
 const NESTED_SCAN_SKIP: &[&str] = &[
     ".git",
     "node_modules",
@@ -141,10 +142,8 @@ async fn scan_git_repos_nested(root: &Path) -> Result<Vec<PathBuf>, String> {
                 Ok(None) => break,
                 Err(_) => break,
             };
-            if should_skip_nested_dir(&entry.file_name()) {
-                continue;
-            }
             let path = entry.path();
+            let skip_descend = should_skip_nested_dir(&entry.file_name());
             // Follow symlinks, matching the shallow scan: a child that is a
             // symlink-to-dir with a `.git` entry is a repo, not a hole.
             let meta = match fs::metadata(&path).await {
@@ -161,7 +160,9 @@ async fn scan_git_repos_nested(root: &Path) -> Result<Vec<PathBuf>, String> {
             if git::is_git_repo(&path) {
                 candidates.push(path.clone());
             }
-            if child_depth == NESTED_SCAN_MAX_DEPTH {
+            // Build/package trees may themselves be a checkout we should
+            // show, but they are never descended into.
+            if skip_descend || child_depth == NESTED_SCAN_MAX_DEPTH {
                 continue;
             }
             // Keep walking inside repos so nested checkouts and worktrees
@@ -362,6 +363,22 @@ mod tests {
         let found = scan_git_repos(&root, true).await.unwrap();
         let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
         assert_eq!(rels, vec![PathBuf::from("app")]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_lists_skip_named_dir_when_it_is_a_repo() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("build/.git")).unwrap();
+        std::fs::create_dir_all(root.join("build/nested/.git")).unwrap();
+        std::fs::create_dir_all(root.join("app/.git")).unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
+        assert_eq!(
+            rels,
+            vec![PathBuf::from("app"), PathBuf::from("build")],
+            "a checkout named build should appear, but we must not walk inside it"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 
