@@ -102,10 +102,30 @@ fn checkout_from_worktree_gitdir(gitdir_file: &Path) -> Option<PathBuf> {
 fn worktree_checkout_for_event(event_path: &Path, repos_root: &Path) -> Option<PathBuf> {
     let gitdir_file = worktree_gitdir_file(event_path)?;
     let checkout = checkout_from_worktree_gitdir(&gitdir_file)?;
-    if checkout == repos_root || checkout.strip_prefix(repos_root).is_ok() {
+    if path_is_under(&checkout, repos_root) {
         Some(checkout)
     } else {
         None
+    }
+}
+
+/// Containment after canonicalize so a gitdir pointer with `..` cannot
+/// attribute an event to a checkout outside the watched root. Falls back
+/// to a lexical check when canonicalize fails (dangling path).
+fn path_is_under(child: &Path, root: &Path) -> bool {
+    match (std::fs::canonicalize(child), std::fs::canonicalize(root)) {
+        (Ok(c), Ok(r)) => c == r || c.strip_prefix(&r).is_ok(),
+        _ => {
+            if child == root {
+                return true;
+            }
+            let Ok(rel) = child.strip_prefix(root) else {
+                return false;
+            };
+            // A lexical `..` after strip_prefix is not containment.
+            !rel.components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+        }
     }
 }
 
@@ -463,6 +483,34 @@ mod tests {
             Some(checkout),
         );
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn worktree_gitdir_dotdot_outside_root_is_rejected() {
+        let tmp = std::env::temp_dir().join(format!(
+            "breach-wt-escape-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let root = tmp.join("root");
+        let outside = tmp.join("outside");
+        let meta = root.join("project/.git/worktrees/evil");
+        std::fs::create_dir_all(&meta).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join(".git"), "gitdir: dummy\n").unwrap();
+        let pointed = root.join("../outside/.git");
+        std::fs::write(meta.join("gitdir"), format!("{}\n", pointed.display())).unwrap();
+        let event = meta.join("HEAD");
+        let checkout = checkout_from_worktree_gitdir(&meta.join("gitdir")).unwrap();
+        assert!(
+            checkout.strip_prefix(&root).is_ok(),
+            "lexical strip_prefix would accept {checkout:?} under {root:?}"
+        );
+        assert_eq!(worktree_checkout_for_event(&event, &root), None);
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
