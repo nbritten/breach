@@ -44,6 +44,7 @@ import {
   isRepoPinned,
   repoPinKey,
   sortRepos,
+  togglePinnedOrder,
   REPO_FILTER_ORDER,
   repoFilterLabel,
   repoFilterCounts,
@@ -75,17 +76,17 @@ export function Dashboard() {
   const { showError } = useToast();
 
   const togglePin = useCallback(
-    async (name: string) => {
-      const next = pinnedOrder.includes(name)
-        ? pinnedOrder.filter((n) => n !== name)
-        : [...pinnedOrder, name];
+    async (key: string) => {
+      const repo = repos.find((r) => r.path === key || r.name === key);
+      if (!repo) return;
+      const next = togglePinnedOrder(repo, repos, pinnedOrder);
       setPinnedOrder(next);
       // setEffectivePinnedRepos routes to either the real settings store or
       // demo mode's in-memory store, so pinning during a demo session updates
       // the dashboard without leaking demo names into real pinnedRepos.
       await setEffectivePinnedRepos(next);
     },
-    [pinnedOrder],
+    [pinnedOrder, repos],
   );
 
   const refreshPrs = useCallback((forOrgs: string[]) => {
@@ -331,8 +332,8 @@ export function Dashboard() {
   );
 
   const sections = useMemo(
-    () => groupRepos(filteredRepos, pinnedOrder),
-    [filteredRepos, pinnedOrder],
+    () => groupRepos(filteredRepos, pinnedOrder, repos),
+    [filteredRepos, pinnedOrder, repos],
   );
 
   const toggle = (key: string) =>
@@ -523,7 +524,7 @@ export function Dashboard() {
                           onRefresh={refreshOne}
                           authoredPrs={prs.authored[r.name] ?? EMPTY_PRS}
                           reviewPrs={prs.review_requested[r.name] ?? EMPTY_PRS}
-                          pinned={isRepoPinned(r, pinnedOrder)}
+                          pinned={isRepoPinned(r, pinnedOrder, repos)}
                           onTogglePin={togglePin}
                           pinKey={repoPinKey(r, repos)}
                           ci={ciByPath[r.path]}

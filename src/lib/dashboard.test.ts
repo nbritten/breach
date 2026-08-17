@@ -6,6 +6,7 @@ import {
   isRepoPinned,
   repoPinKey,
   sortRepos,
+  togglePinnedOrder,
   repoFilterCounts,
   type RepoFilter,
 } from "./dashboard";
@@ -104,6 +105,17 @@ describe("groupRepos", () => {
     const sections = groupRepos(repos, ["b"]);
     expect(sections[0].repos.map((r) => r.name)).toEqual(["b"]);
   });
+
+  it("does not apply a name pin to both checkouts when names clash", () => {
+    const acme = repo("frontend", "main", "/dev/acme/frontend");
+    const beta = repo("frontend", "main", "/dev/beta/frontend");
+    const sections = groupRepos([acme, beta], ["frontend"]);
+    expect(sections.map((s) => s.key)).toEqual(["__other__"]);
+    expect(sections[0].repos.map((r) => r.path)).toEqual([
+      "/dev/acme/frontend",
+      "/dev/beta/frontend",
+    ]);
+  });
 });
 
 describe("repoPinKey and isRepoPinned", () => {
@@ -121,8 +133,55 @@ describe("repoPinKey and isRepoPinned", () => {
   });
 
   it("treats a path pin as matching only that checkout", () => {
-    expect(isRepoPinned(acme, ["/dev/acme/frontend"])).toBe(true);
-    expect(isRepoPinned(beta, ["/dev/acme/frontend"])).toBe(false);
+    expect(isRepoPinned(acme, ["/dev/acme/frontend"], [acme, beta])).toBe(true);
+    expect(isRepoPinned(beta, ["/dev/acme/frontend"], [acme, beta])).toBe(false);
+  });
+
+  it("ignores a name pin when two checkouts share that basename", () => {
+    expect(isRepoPinned(acme, ["frontend"], [acme, beta])).toBe(false);
+    expect(isRepoPinned(beta, ["frontend"], [acme, beta])).toBe(false);
+  });
+
+  it("still matches a name pin when the basename is unique", () => {
+    expect(isRepoPinned(unique, ["api"], [acme, unique])).toBe(true);
+  });
+});
+
+describe("togglePinnedOrder", () => {
+  const acme = repo("frontend", "main", "/dev/acme/frontend");
+  const beta = repo("frontend", "main", "/dev/beta/frontend");
+  const unique = repo("api", "main", "/dev/api");
+
+  it("pins by path when names clash", () => {
+    expect(togglePinnedOrder(acme, [acme, beta], [])).toEqual([
+      "/dev/acme/frontend",
+    ]);
+  });
+
+  it("unpins a path pin", () => {
+    expect(
+      togglePinnedOrder(acme, [acme, beta], ["/dev/acme/frontend"]),
+    ).toEqual([]);
+  });
+
+  it("clears a leftover name pin when pinning a clashing checkout", () => {
+    expect(togglePinnedOrder(acme, [acme, beta], ["frontend"])).toEqual([
+      "/dev/acme/frontend",
+    ]);
+  });
+
+  it("unpins by dropping both name and path keys", () => {
+    expect(
+      togglePinnedOrder(acme, [acme, beta], [
+        "frontend",
+        "/dev/acme/frontend",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("pins and unpins by basename when the name is unique", () => {
+    expect(togglePinnedOrder(unique, [acme, unique], [])).toEqual(["api"]);
+    expect(togglePinnedOrder(unique, [acme, unique], ["api"])).toEqual([]);
   });
 });
 

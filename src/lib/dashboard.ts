@@ -149,6 +149,13 @@ export function filterRepos(repos: RepoSummary[], query: string): RepoSummary[] 
   );
 }
 
+function namesClash(
+  repo: RepoSummary,
+  repos: readonly RepoSummary[],
+): boolean {
+  return repos.some((r) => r.name === repo.name && r.path !== repo.path);
+}
+
 /**
  * Pin identity for a repo. Basename is used when it's unique among `repos`
  * (matches typed Settings pins and the historical `pinnedRepos` values).
@@ -159,20 +166,61 @@ export function repoPinKey(
   repo: RepoSummary,
   repos: readonly RepoSummary[],
 ): string {
-  const clash = repos.some((r) => r.name === repo.name && r.path !== repo.path);
-  return clash ? repo.path : repo.name;
+  return namesClash(repo, repos) ? repo.path : repo.name;
+}
+
+/**
+ * True when `keys` identifies `repo`. A path key always matches that
+ * checkout. A basename key matches only when the name is unique among
+ * `repos` — otherwise a leftover `frontend` pin would light up every
+ * nested frontend.
+ */
+export function matchesIdentityKey(
+  repo: RepoSummary,
+  keys: readonly string[],
+  repos: readonly RepoSummary[],
+): boolean {
+  if (keys.includes(repo.path)) return true;
+  if (namesClash(repo, repos)) return false;
+  return keys.includes(repo.name);
 }
 
 export function isRepoPinned(
   repo: RepoSummary,
   pinnedOrder: readonly string[],
+  repos: readonly RepoSummary[],
 ): boolean {
-  return pinnedOrder.some((p) => p === repo.path || p === repo.name);
+  return matchesIdentityKey(repo, pinnedOrder, repos);
 }
 
-function pinIndex(repo: RepoSummary, pinnedOrder: readonly string[]): number {
+/**
+ * Pin or unpin `repo`. Unpin drops both the basename and the path so a
+ * leftover name pin cannot keep the card stuck after a clash appears.
+ */
+export function togglePinnedOrder(
+  repo: RepoSummary,
+  repos: readonly RepoSummary[],
+  pinnedOrder: readonly string[],
+): string[] {
+  if (isRepoPinned(repo, pinnedOrder, repos)) {
+    return pinnedOrder.filter((p) => p !== repo.name && p !== repo.path);
+  }
+  // A leftover basename pin is ambiguous once names clash — drop it so
+  // pinning one checkout doesn't leave a zombie `frontend` entry.
+  const rest = namesClash(repo, repos)
+    ? pinnedOrder.filter((p) => p !== repo.name)
+    : [...pinnedOrder];
+  return [...rest, repoPinKey(repo, repos)];
+}
+
+function pinIndex(
+  repo: RepoSummary,
+  pinnedOrder: readonly string[],
+  repos: readonly RepoSummary[],
+): number {
   const byPath = pinnedOrder.indexOf(repo.path);
   if (byPath >= 0) return byPath;
+  if (namesClash(repo, repos)) return -1;
   return pinnedOrder.indexOf(repo.name);
 }
 
@@ -207,20 +255,24 @@ export function sortRepos(
  * a header for that case. Empty Pinned/Other sections are omitted, so callers
  * never have to render a header over an empty grid.
  *
- * Pins match either `name` or `path` so a path-keyed pin from a name clash
- * doesn't also require the basename, and a legacy name pin still works when
- * the basename is unique.
+ * Pins match a path always, and a basename only when that name is unique
+ * in `allRepos` (the unfiltered list). Pass `allRepos` when `repos` is a
+ * search/chip slice so a hidden sibling still counts as a name clash.
  */
 export function groupRepos(
   repos: RepoSummary[],
   pinnedOrder: string[],
+  allRepos: readonly RepoSummary[] = repos,
 ): Section[] {
   if (pinnedOrder.length === 0) {
     return [{ key: "__all__", label: "", repos }];
   }
-  const pinned = repos.filter((r) => isRepoPinned(r, pinnedOrder));
-  pinned.sort((a, b) => pinIndex(a, pinnedOrder) - pinIndex(b, pinnedOrder));
-  const other = repos.filter((r) => !isRepoPinned(r, pinnedOrder));
+  const pinned = repos.filter((r) => isRepoPinned(r, pinnedOrder, allRepos));
+  pinned.sort(
+    (a, b) =>
+      pinIndex(a, pinnedOrder, allRepos) - pinIndex(b, pinnedOrder, allRepos),
+  );
+  const other = repos.filter((r) => !isRepoPinned(r, pinnedOrder, allRepos));
   const sections: Section[] = [];
   if (pinned.length > 0) {
     sections.push({ key: "__pinned__", label: "Pinned", repos: pinned });
