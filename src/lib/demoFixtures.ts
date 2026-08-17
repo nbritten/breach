@@ -161,6 +161,7 @@ export function demoRepoSummaries(): RepoSummary[] {
       timestamp: t - r.commitAgoMinutes * 60,
     },
     error: null,
+    origin_slug: `${DEMO_ORG}/${r.name}`,
   }));
 }
 
@@ -178,11 +179,12 @@ export function demoRepoSummary(repoPath: string): RepoSummary {
     has_upstream: false,
     last_commit: null,
     error: null,
+    origin_slug: null,
   };
 }
 
 const PRS_AUTHORED: Record<string, PrInfo[]> = {
-  [DEMO_ORG]: [
+  [`${DEMO_ORG}/customer-portal`]: [
     {
       number: 412,
       title: "Settle disputes via webhook instead of polling",
@@ -190,6 +192,8 @@ const PRS_AUTHORED: Record<string, PrInfo[]> = {
       is_draft: false,
       repo: "customer-portal",
     },
+  ],
+  [`${DEMO_ORG}/notifications-worker`]: [
     {
       number: 198,
       title: "Add per-tenant digest preferences",
@@ -197,6 +201,8 @@ const PRS_AUTHORED: Record<string, PrInfo[]> = {
       is_draft: false,
       repo: "notifications-worker",
     },
+  ],
+  [`${DEMO_ORG}/analytics-dashboard`]: [
     {
       number: 87,
       title: "Funnel chart: drill-down by step",
@@ -208,7 +214,7 @@ const PRS_AUTHORED: Record<string, PrInfo[]> = {
 };
 
 const PRS_REVIEW_REQUESTED: Record<string, PrInfo[]> = {
-  [DEMO_ORG]: [
+  [`${DEMO_ORG}/analytics-dashboard`]: [
     {
       number: 88,
       title: "Persist saved filters in URL hash",

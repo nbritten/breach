@@ -34,7 +34,6 @@ import type {
   AgentSession,
   CiStatus,
   MyPrs,
-  PrInfo,
   RepoSummary,
 } from "../types";
 import {
@@ -42,6 +41,7 @@ import {
   filterRepos,
   groupRepos,
   isRepoPinned,
+  prsForRepo,
   repoPinKey,
   repoPathLabel,
   sortRepos,
@@ -51,8 +51,6 @@ import {
   repoFilterCounts,
   type RepoFilter,
 } from "../lib/dashboard";
-
-const EMPTY_PRS: PrInfo[] = [];
 
 export function Dashboard() {
   const [repos, setRepos] = useState<RepoSummary[]>([]);
@@ -523,8 +521,8 @@ export function Dashboard() {
                           key={r.path}
                           repo={r}
                           onRefresh={refreshOne}
-                          authoredPrs={prs.authored[r.name] ?? EMPTY_PRS}
-                          reviewPrs={prs.review_requested[r.name] ?? EMPTY_PRS}
+                          authoredPrs={prsForRepo(r, prs.authored)}
+                          reviewPrs={prsForRepo(r, prs.review_requested)}
                           pinned={isRepoPinned(r, pinnedOrder, repos)}
                           onTogglePin={togglePin}
                           pinKey={repoPinKey(r, repos)}

@@ -13,6 +13,9 @@ pub struct RepoSummary {
     pub has_upstream: bool,
     pub last_commit: Option<CommitInfo>,
     pub error: Option<String>,
+    /// `org/name` from `origin`, when the remote URL parses. Used to attach
+    /// GitHub PRs to a checkout when two local folders share a basename.
+    pub origin_slug: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -117,7 +120,9 @@ pub async fn repo_summary(path: PathBuf) -> RepoSummary {
         has_upstream: false,
         last_commit: None,
         error: None,
+        origin_slug: None,
     };
+    summary.origin_slug = origin_slug(&path).await;
 
     let status = match git(&path, &["status", "--porcelain=v2", "--branch"]).await {
         Ok(s) => s,

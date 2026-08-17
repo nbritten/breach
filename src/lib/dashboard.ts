@@ -2,6 +2,7 @@ import type {
   AgentProvider,
   CiStatus,
   MyPrs,
+  PrInfo,
   RepoSummary,
 } from "../types";
 import { AGENT_INFO, AGENT_PROVIDER_ORDER } from "./agents";
@@ -45,17 +46,37 @@ export function repoFilterLabel(filter: RepoFilter): string {
 }
 
 /**
- * True if `name` shows up as the `repo` field of any PR the user authored
- * or was requested as a reviewer on. Linear scan — PR lists are small.
+ * True if this checkout has an open PR the user authored or was asked to
+ * review. Prefers `origin_slug` so two local `frontend` folders that are
+ * different GitHub repos do not share badges. Falls back to basename when
+ * there is no remote (tests, missing origin).
  */
-function hasOpenPr(name: string, prs: MyPrs): boolean {
+function hasOpenPr(repo: RepoSummary, prs: MyPrs): boolean {
+  if (repo.origin_slug) {
+    const k = repo.origin_slug;
+    return (
+      (prs.authored[k]?.length ?? 0) > 0 ||
+      (prs.review_requested[k]?.length ?? 0) > 0
+    );
+  }
   for (const list of Object.values(prs.authored)) {
-    if (list.some((p) => p.repo === name)) return true;
+    if (list.some((p) => p.repo === repo.name)) return true;
   }
   for (const list of Object.values(prs.review_requested)) {
-    if (list.some((p) => p.repo === name)) return true;
+    if (list.some((p) => p.repo === repo.name)) return true;
   }
   return false;
+}
+
+/** PRs attached to this checkout: slug map first, then basename for demos. */
+export function prsForRepo(
+  repo: RepoSummary,
+  bucket: Record<string, PrInfo[]>,
+): PrInfo[] {
+  if (repo.origin_slug && bucket[repo.origin_slug]) {
+    return bucket[repo.origin_slug];
+  }
+  return bucket[repo.name] ?? [];
 }
 
 function matchesFilter(
@@ -77,7 +98,7 @@ function matchesFilter(
     case "ahead":
       return repo.ahead > 0;
     case "open-prs":
-      return hasOpenPr(repo.name, prs);
+      return hasOpenPr(repo, prs);
     case "failing-ci":
       return ciByPath[repo.path]?.state === "failure";
     default:

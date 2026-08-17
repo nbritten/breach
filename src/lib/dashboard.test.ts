@@ -9,6 +9,7 @@ import {
   sortRepos,
   togglePinnedOrder,
   repoFilterCounts,
+  prsForRepo,
   type RepoFilter,
 } from "./dashboard";
 import type { CiStatus, MyPrs, RepoSummary } from "../types";
@@ -28,6 +29,7 @@ function repo(
     has_upstream: true,
     last_commit: null,
     error: null,
+    origin_slug: null,
   };
 }
 
@@ -244,6 +246,38 @@ describe("sortRepos", () => {
   });
 });
 
+describe("prsForRepo", () => {
+  const acme = {
+    ...repo("frontend", "main", "/dev/acme/frontend"),
+    origin_slug: "acme/frontend",
+  };
+  const beta = {
+    ...repo("frontend", "main", "/dev/beta/frontend"),
+    origin_slug: "beta/frontend",
+  };
+  const bucket = {
+    "acme/frontend": [
+      { number: 1, title: "a", url: "u", is_draft: false, repo: "frontend" },
+    ],
+    "beta/frontend": [
+      { number: 2, title: "b", url: "u", is_draft: false, repo: "frontend" },
+    ],
+  };
+
+  it("attaches PRs by origin slug so same-named checkouts stay distinct", () => {
+    expect(prsForRepo(acme, bucket).map((p) => p.number)).toEqual([1]);
+    expect(prsForRepo(beta, bucket).map((p) => p.number)).toEqual([2]);
+  });
+
+  it("falls back to basename when there is no origin slug", () => {
+    const local = repo("beta");
+    const byName = {
+      beta: [{ number: 9, title: "x", url: "u", is_draft: false, repo: "beta" }],
+    };
+    expect(prsForRepo(local, byName).map((p) => p.number)).toEqual([9]);
+  });
+});
+
 describe("filterByChips and repoFilterCounts", () => {
   const dirtyRepo = { ...repo("alpha"), dirty: true };
   const behindRepo = { ...repo("beta"), behind: 3 };
@@ -295,6 +329,31 @@ describe("filterByChips and repoFilterCounts", () => {
     expect(
       filterByChips(repos, active, prsForBeta, {}).map((r) => r.name),
     ).toEqual(["beta"]);
+  });
+
+  it("matches open-prs via origin slug so same-named checkouts stay distinct", () => {
+    const acme = {
+      ...repo("frontend", "main", "/dev/acme/frontend"),
+      origin_slug: "acme/frontend",
+    };
+    const beta = {
+      ...repo("frontend", "main", "/dev/beta/frontend"),
+      origin_slug: "beta/frontend",
+    };
+    const prs: MyPrs = {
+      authored: {
+        "acme/frontend": [
+          { number: 1, title: "x", url: "u", is_draft: false, repo: "frontend" },
+        ],
+      },
+      review_requested: {},
+      errors: {},
+    };
+    expect(
+      filterByChips([acme, beta], new Set<RepoFilter>(["open-prs"]), prs, {}).map(
+        (r) => r.path,
+      ),
+    ).toEqual(["/dev/acme/frontend"]);
   });
 
   it("matches failing-ci filter via ciByPath", () => {

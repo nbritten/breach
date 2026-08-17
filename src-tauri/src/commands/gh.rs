@@ -271,7 +271,8 @@ pub async fn list_my_prs(orgs: Vec<String>) -> Result<MyPrs, String> {
         match a {
             Ok(prs) => {
                 for pr in prs {
-                    out.authored.entry(pr.repo.clone()).or_default().push(pr);
+                    let key = format!("{org}/{}", pr.repo);
+                    out.authored.entry(key).or_default().push(pr);
                 }
             }
             Err(e) => {
@@ -281,10 +282,8 @@ pub async fn list_my_prs(orgs: Vec<String>) -> Result<MyPrs, String> {
         match r {
             Ok(prs) => {
                 for pr in prs {
-                    out.review_requested
-                        .entry(pr.repo.clone())
-                        .or_default()
-                        .push(pr);
+                    let key = format!("{org}/{}", pr.repo);
+                    out.review_requested.entry(key).or_default().push(pr);
                 }
             }
             Err(e) => {
