@@ -136,8 +136,9 @@ export interface Section {
 }
 
 /**
- * Filter repos by a free-text query matching name or branch (case-insensitive).
- * Returns the original array reference when the query is blank.
+ * Filter repos by a free-text query matching name, path, or branch
+ * (case-insensitive). Returns the original array reference when the query
+ * is blank.
  */
 export function filterRepos(repos: RepoSummary[], query: string): RepoSummary[] {
   const q = query.trim().toLowerCase();
@@ -145,8 +146,38 @@ export function filterRepos(repos: RepoSummary[], query: string): RepoSummary[] 
   return repos.filter(
     (r) =>
       r.name.toLowerCase().includes(q) ||
+      r.path.toLowerCase().includes(q) ||
       (r.branch ?? "").toLowerCase().includes(q),
   );
+}
+
+/**
+ * Short path shown on a card when two checkouts share a basename.
+ * Picks the shortest trailing suffix that is unique among `repos`
+ * (at least `parent/name`). Null when the basename is already unique.
+ */
+export function repoPathLabel(
+  repo: RepoSummary,
+  repos: readonly RepoSummary[],
+): string | null {
+  if (!namesClash(repo, repos)) return null;
+  const parts = pathParts(repo.path);
+  for (let n = 2; n <= parts.length; n++) {
+    const label = parts.slice(-n).join("/");
+    const clash = repos.some(
+      (r) => r.path !== repo.path && pathTail(r.path, n) === label,
+    );
+    if (!clash) return label;
+  }
+  return repo.path.replace(/\\/g, "/");
+}
+
+function pathParts(path: string): string[] {
+  return path.split(/[/\\]/).filter((p) => p.length > 0);
+}
+
+function pathTail(path: string, n: number): string {
+  return pathParts(path).slice(-n).join("/");
 }
 
 function namesClash(

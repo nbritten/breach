@@ -43,6 +43,7 @@ import {
   groupRepos,
   isRepoPinned,
   repoPinKey,
+  repoPathLabel,
   sortRepos,
   togglePinnedOrder,
   REPO_FILTER_ORDER,
@@ -527,6 +528,7 @@ export function Dashboard() {
                           pinned={isRepoPinned(r, pinnedOrder, repos)}
                           onTogglePin={togglePin}
                           pinKey={repoPinKey(r, repos)}
+                          pathLabel={repoPathLabel(r, repos)}
                           ci={ciByPath[r.path]}
                           activeAgents={agentsByPath[r.path]}
                           docsUrl={

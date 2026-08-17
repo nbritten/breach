@@ -5,6 +5,7 @@ import {
   groupRepos,
   isRepoPinned,
   repoPinKey,
+  repoPathLabel,
   sortRepos,
   togglePinnedOrder,
   repoFilterCounts,
@@ -55,6 +56,38 @@ describe("filterRepos", () => {
 
   it("returns empty when nothing matches", () => {
     expect(filterRepos(repos, "zzz")).toEqual([]);
+  });
+
+  it("matches by path so nested parents are searchable", () => {
+    const nested = [
+      repo("frontend", "main", "/dev/acme/frontend"),
+      repo("frontend", "main", "/dev/beta/frontend"),
+    ];
+    expect(filterRepos(nested, "acme").map((r) => r.path)).toEqual([
+      "/dev/acme/frontend",
+    ]);
+  });
+});
+
+describe("repoPathLabel", () => {
+  const acme = repo("frontend", "main", "/dev/acme/frontend");
+  const beta = repo("frontend", "main", "/dev/beta/frontend");
+  const unique = repo("api", "main", "/dev/api");
+
+  it("is null when the basename is unique", () => {
+    expect(repoPathLabel(unique, [acme, unique])).toBeNull();
+  });
+
+  it("shows parent/name when two checkouts share a basename", () => {
+    expect(repoPathLabel(acme, [acme, beta])).toBe("acme/frontend");
+    expect(repoPathLabel(beta, [acme, beta])).toBe("beta/frontend");
+  });
+
+  it("lengthens the suffix when parent/name still clashes", () => {
+    const a = repo("frontend", "main", "/work/org/app/frontend");
+    const b = repo("frontend", "main", "/work/other/app/frontend");
+    expect(repoPathLabel(a, [a, b])).toBe("org/app/frontend");
+    expect(repoPathLabel(b, [a, b])).toBe("other/app/frontend");
   });
 });
 

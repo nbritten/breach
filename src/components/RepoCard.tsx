@@ -30,6 +30,7 @@ interface Props {
   pinned?: boolean;
   onTogglePin?: (key: string) => void;
   pinKey?: string;
+  pathLabel?: string | null;
   ci?: CiStatus;
   activeAgents?: ReadonlySet<AgentProvider>;
   docsUrl?: string | null;
@@ -59,6 +60,7 @@ export function RepoCard({
   pinned = false,
   onTogglePin,
   pinKey,
+  pathLabel,
   ci,
   activeAgents,
   docsUrl,
@@ -145,7 +147,19 @@ export function RepoCard({
                 );
               },
             )}
-          <h3 className="font-semibold truncate">{repo.name}</h3>
+          <div className="min-w-0">
+            <h3 className="font-semibold truncate" title={repo.path}>
+              {repo.name}
+            </h3>
+            {pathLabel && (
+              <p
+                className="text-[10px] text-neutral-500 font-mono truncate"
+                title={repo.path}
+              >
+                {pathLabel}
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {repo.dirty && (
