@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  diffRenderMode,
-  HIGHLIGHT_CHANGED_LINE_LIMIT,
+  parseSplitDiff,
   parseUnifiedDiff,
   RENDER_CHANGED_LINE_LIMIT,
+  shouldDeferDiff,
 } from "./parseDiff";
 
 describe("parseUnifiedDiff", () => {
@@ -162,21 +162,74 @@ Binary files a/image.png and b/image.png differ
   });
 });
 
-describe("diffRenderMode", () => {
+describe("shouldDeferDiff", () => {
   const withChanged = (n: number) => ({ additions: Math.ceil(n / 2), deletions: Math.floor(n / 2) });
 
-  it("renders small files fully highlighted", () => {
-    expect(diffRenderMode(withChanged(0))).toBe("full");
-    expect(diffRenderMode(withChanged(HIGHLIGHT_CHANGED_LINE_LIMIT))).toBe("full");
-  });
-
-  it("skips highlighting above the highlight limit", () => {
-    expect(diffRenderMode(withChanged(HIGHLIGHT_CHANGED_LINE_LIMIT + 1))).toBe("plain");
-    expect(diffRenderMode(withChanged(RENDER_CHANGED_LINE_LIMIT))).toBe("plain");
+  it("renders files through the limit", () => {
+    expect(shouldDeferDiff(withChanged(0))).toBe(false);
+    expect(shouldDeferDiff(withChanged(RENDER_CHANGED_LINE_LIMIT))).toBe(false);
   });
 
   it("defers files above the render limit", () => {
-    expect(diffRenderMode(withChanged(RENDER_CHANGED_LINE_LIMIT + 1))).toBe("deferred");
-    expect(diffRenderMode(withChanged(100_000))).toBe("deferred");
+    expect(shouldDeferDiff(withChanged(RENDER_CHANGED_LINE_LIMIT + 1))).toBe(true);
+    expect(shouldDeferDiff(withChanged(100_000))).toBe(true);
+  });
+});
+
+describe("parseSplitDiff", () => {
+  it("aligns replacement blocks and tracks line numbers", () => {
+    const rows = parseSplitDiff(`diff --git a/a.ts b/a.ts
+--- a/a.ts
++++ b/a.ts
+@@ -10,3 +10,4 @@ function x() {
+ context
+-old one
+-old two
++new one
++new two
++new three
+ tail`);
+
+    expect(rows).toEqual([
+      { kind: "hunk", text: "@@ -10,3 +10,4 @@ function x() {" },
+      {
+        kind: "lines",
+        old: { lineNumber: 10, text: "context", kind: "context" },
+        new: { lineNumber: 10, text: "context", kind: "context" },
+      },
+      {
+        kind: "lines",
+        old: { lineNumber: 11, text: "old one", kind: "deletion" },
+        new: { lineNumber: 11, text: "new one", kind: "addition" },
+      },
+      {
+        kind: "lines",
+        old: { lineNumber: 12, text: "old two", kind: "deletion" },
+        new: { lineNumber: 12, text: "new two", kind: "addition" },
+      },
+      {
+        kind: "lines",
+        old: { lineNumber: null, text: "", kind: "empty" },
+        new: { lineNumber: 13, text: "new three", kind: "addition" },
+      },
+      {
+        kind: "lines",
+        old: { lineNumber: 13, text: "tail", kind: "context" },
+        new: { lineNumber: 14, text: "tail", kind: "context" },
+      },
+    ]);
+  });
+
+  it("resets counters at each hunk", () => {
+    const rows = parseSplitDiff(`@@ -1 +2 @@
+-a
++b
+@@ -20 +30 @@
+ c`);
+    expect(rows[rows.length - 1]).toEqual({
+      kind: "lines",
+      old: { lineNumber: 20, text: "c", kind: "context" },
+      new: { lineNumber: 30, text: "c", kind: "context" },
+    });
   });
 });

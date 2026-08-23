@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "@git-diff-view/react/styles/diff-view.css";
 
 :root {
   color-scheme: dark;
