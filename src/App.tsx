@@ -1,10 +1,7 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Route, Routes } from "react-router-dom";
 import { Dashboard } from "./pages/Dashboard";
-import { RepoDetail } from "./pages/RepoDetail";
-import { Settings } from "./pages/Settings";
 import { TopBar } from "./components/TopBar";
-import { Onboarding } from "./components/Onboarding";
 import { SearchProvider } from "./lib/search";
 import { OnboardingProvider, useOnboarding } from "./lib/onboarding";
 import { ToastProvider } from "./lib/toast";
@@ -17,6 +14,18 @@ import {
 } from "./lib/settings";
 
 type BootState = "loading" | "first-launch" | "ready";
+
+const RepoDetail = lazy(() =>
+  import("./pages/RepoDetail").then((module) => ({ default: module.RepoDetail })),
+);
+const Settings = lazy(() =>
+  import("./pages/Settings").then((module) => ({ default: module.Settings })),
+);
+const Onboarding = lazy(() =>
+  import("./components/Onboarding").then((module) => ({
+    default: module.Onboarding,
+  })),
+);
 
 function AppShell() {
   const { visible, hide } = useOnboarding();
@@ -53,11 +62,13 @@ function AppShell() {
   // path and surface as a red error toast behind the wizard.
   if (bootState === "first-launch") {
     return (
-      <Onboarding
-        persistOnFinish
-        initialReposPath={initialPath}
-        onDone={() => setBootState("ready")}
-      />
+      <Suspense fallback={null}>
+        <Onboarding
+          persistOnFinish
+          initialReposPath={initialPath}
+          onDone={() => setBootState("ready")}
+        />
+      </Suspense>
     );
   }
 
@@ -66,19 +77,25 @@ function AppShell() {
       <div className="h-full flex flex-col">
         <TopBar />
         <div className="flex-1 overflow-hidden">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/repo/:path" element={<RepoDetail />} />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
+          <Suspense
+            fallback={<div className="p-6 text-sm text-neutral-500">Loading…</div>}
+          >
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/repo/:path" element={<RepoDetail />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </Suspense>
         </div>
       </div>
       {visible && (
-        <Onboarding
-          persistOnFinish={false}
-          initialReposPath={initialPath}
-          onDone={hide}
-        />
+        <Suspense fallback={null}>
+          <Onboarding
+            persistOnFinish={false}
+            initialReposPath={initialPath}
+            onDone={hide}
+          />
+        </Suspense>
       )}
     </>
   );

@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api } from "../lib/api";
 import {
@@ -23,8 +31,6 @@ import { agentsByRepo } from "../lib/agents";
 import { jsonEqual } from "../lib/equality";
 
 import { RepoCard } from "../components/RepoCard";
-import { SyncAllModal } from "../components/SyncAllModal";
-import { CloneMissingModal } from "../components/CloneMissingModal";
 import { EmptyState } from "../components/EmptyState";
 import { Tooltip } from "../components/Tooltip";
 import type {
@@ -46,6 +52,16 @@ import {
 } from "../lib/dashboard";
 
 const EMPTY_PRS: PrInfo[] = [];
+const SyncAllModal = lazy(() =>
+  import("../components/SyncAllModal").then((module) => ({
+    default: module.SyncAllModal,
+  })),
+);
+const CloneMissingModal = lazy(() =>
+  import("../components/CloneMissingModal").then((module) => ({
+    default: module.CloneMissingModal,
+  })),
+);
 
 export function Dashboard() {
   const [repos, setRepos] = useState<RepoSummary[]>([]);
@@ -173,7 +189,7 @@ export function Dashboard() {
       }),
   );
 
-  // Agent session detection is a cheap local `ps + lsof` check, so a
+  // Agent session detection is a cheap targeted `lsof` check, so a
   // tighter cadence than CI is fine. 15s feels live without being noisy.
   // Sessions are usually unchanged tick to tick, but the poll returns a
   // fresh array each time — keep the old identity when the content matches
@@ -278,7 +294,10 @@ export function Dashboard() {
     };
   }, [refresh, refreshOne]);
 
-  const dirtyCount = repos.filter((r) => r.dirty).length;
+  const dirtyCount = useMemo(
+    () => repos.reduce((count, repo) => count + Number(repo.dirty), 0),
+    [repos],
+  );
   const { query } = useSearch();
   const [activeFilters, setActiveFilters] = useState<Set<RepoFilter>>(
     new Set(),
@@ -316,6 +335,7 @@ export function Dashboard() {
     () => groupRepos(filteredRepos, pinnedOrder),
     [filteredRepos, pinnedOrder],
   );
+  const pinnedSet = useMemo(() => new Set(pinnedOrder), [pinnedOrder]);
 
   const toggle = (key: string) =>
     setCollapsed((c) => ({ ...c, [key]: !c[key] }));
@@ -505,7 +525,7 @@ export function Dashboard() {
                           onRefresh={refreshOne}
                           authoredPrs={prs.authored[r.name] ?? EMPTY_PRS}
                           reviewPrs={prs.review_requested[r.name] ?? EMPTY_PRS}
-                          pinned={pinnedOrder.includes(r.name)}
+                          pinned={pinnedSet.has(r.name)}
                           onTogglePin={togglePin}
                           ci={ciByPath[r.path]}
                           activeAgents={agentsByPath[r.path]}
@@ -526,23 +546,27 @@ export function Dashboard() {
       </main>
 
       {showSyncAll && (
-        <SyncAllModal
-          reposPath={reposPath}
-          onClose={() => {
-            setShowSyncAll(false);
-            refresh();
-          }}
-        />
+        <Suspense fallback={null}>
+          <SyncAllModal
+            reposPath={reposPath}
+            onClose={() => {
+              setShowSyncAll(false);
+              refresh();
+            }}
+          />
+        </Suspense>
       )}
 
       {showClone && (
-        <CloneMissingModal
-          reposPath={reposPath}
-          onClose={() => {
-            setShowClone(false);
-            refresh();
-          }}
-        />
+        <Suspense fallback={null}>
+          <CloneMissingModal
+            reposPath={reposPath}
+            onClose={() => {
+              setShowClone(false);
+              refresh();
+            }}
+          />
+        </Suspense>
       )}
     </div>
   );

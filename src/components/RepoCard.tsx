@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from "react";
+import { memo, useState, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { openTerminal } from "../lib/settings";
@@ -50,7 +50,7 @@ function prTooltip(prs: PrInfo[]): string {
     .join("\n");
 }
 
-export function RepoCard({
+export const RepoCard = memo(function RepoCard({
   repo,
   onRefresh,
   authoredPrs = [],
@@ -306,4 +306,4 @@ export function RepoCard({
       ) : null}
     </Link>
   );
-}
+});
