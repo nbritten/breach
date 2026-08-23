@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-use futures::future::join_all;
 use serde::Serialize;
 use tokio::process::Command;
 
@@ -8,9 +7,8 @@ use tokio::process::Command;
 /// `(stable id, process name)` tuple. The id is what the frontend keys its
 /// indicator rendering off of and what shows up in the serialized payload.
 ///
-/// Process names are matched against the basename of `ps -axo comm=`, so
-/// `claude`, `/opt/homebrew/bin/claude`, and `node-bin/claude` all match
-/// `claude`. Pick names exact enough to avoid colliding with unrelated tools.
+/// Process names are matched exactly against lsof's command field after its
+/// `-c` pre-filter. Pick names exact enough to avoid unrelated tools.
 ///
 /// Mirrored on the frontend in `src/lib/agents.ts` (`AGENT_PROVIDER_ORDER` +
 /// `AGENT_INFO`). The two lists must agree on provider ids — if you add one
@@ -18,12 +16,9 @@ use tokio::process::Command;
 /// backend-side but renders no icon.
 ///
 /// Known limitation: an agent launched indirectly (e.g. `bash -c claude` or
-/// a wrapper script) may show as `bash` / wrapper-name in `comm` and won't
+/// a wrapper script) may show as `bash` / wrapper-name to lsof and won't
 /// match. The two CLIs we ship with today both expose themselves directly.
-const AGENT_PROCESS_NAMES: &[(&str, &str)] = &[
-    ("claude", "claude"),
-    ("codex", "codex"),
-];
+const AGENT_PROCESS_NAMES: &[(&str, &str)] = &[("claude", "claude"), ("codex", "codex")];
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AgentSession {
@@ -43,34 +38,25 @@ pub async fn list_active_agent_sessions(
         return Ok(Vec::new());
     }
 
-    let all_pids = ps_pids_by_name().await?;
-    if all_pids.is_empty() {
-        return Ok(Vec::new());
+    // One targeted lsof invocation replaces `ps` plus one lsof subprocess per
+    // matching PID. `-c` is only a coarse pre-filter (it also prefix-matches),
+    // so the parser below still requires an exact known process name.
+    let mut command = Command::new("lsof");
+    command.args(["-a", "-d", "cwd"]);
+    for (_, process_name) in AGENT_PROCESS_NAMES {
+        command.args(["-c", process_name]);
     }
-
-    // Collect all (provider, pid) pairs we need to resolve a cwd for, then
-    // fire the lsof calls in parallel — they're independent and each takes
-    // tens of ms, so serializing them adds up on machines with several
-    // running agents.
-    let lookups: Vec<(&str, u32)> = AGENT_PROCESS_NAMES
-        .iter()
-        .flat_map(|(provider_id, process_name)| {
-            all_pids
-                .iter()
-                .find(|(name, _)| name == process_name)
-                .map(|(_, pids)| pids.iter().map(move |p| (*provider_id, *p)))
-                .into_iter()
-                .flatten()
-        })
-        .collect();
-
-    let cwds = join_all(lookups.iter().map(|(_, pid)| process_cwd(*pid))).await;
-
+    command.args(["-F", "pcn"]);
+    let output = command
+        .output()
+        .await
+        .map_err(|e| format!("lsof spawn failed: {e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let detected = parse_lsof_output(&stdout);
     let mut sessions: HashSet<AgentSession> = HashSet::new();
-    for ((provider_id, _pid), cwd) in lookups.into_iter().zip(cwds) {
-        let Some(cwd) = cwd else { continue };
+    for (provider_id, cwd) in detected {
         for repo_path in &repo_paths {
-            if path_contains(repo_path, &cwd) {
+            if path_contains(repo_path, cwd) {
                 sessions.insert(AgentSession {
                     provider: provider_id.to_string(),
                     repo_path: repo_path.clone(),
@@ -79,64 +65,32 @@ pub async fn list_active_agent_sessions(
             }
         }
     }
-    Ok(sessions.into_iter().collect())
+    let mut sessions: Vec<_> = sessions.into_iter().collect();
+    sessions.sort_by(|a, b| {
+        a.repo_path
+            .cmp(&b.repo_path)
+            .then_with(|| a.provider.cmp(&b.provider))
+    });
+    Ok(sessions)
 }
 
-/// Parse `ps -axo pid=,comm=` once into `name -> Vec<pid>`. Cheaper than
-/// running ps once per provider when we add more agents.
-async fn ps_pids_by_name() -> Result<Vec<(String, Vec<u32>)>, String> {
-    let output = Command::new("ps")
-        .args(["-axo", "pid=,comm="])
-        .output()
-        .await
-        .map_err(|e| format!("ps spawn failed: {e}"))?;
-    if !output.status.success() {
-        return Err("ps returned non-zero".into());
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(parse_ps_output(&stdout))
-}
-
-/// Pure parser for the output of `ps -axo pid=,comm=`. Whitespace-separated,
-/// pid first, command path (or basename) second. Unparseable lines are
-/// silently dropped — ps occasionally emits odd entries during racy reads.
-fn parse_ps_output(stdout: &str) -> Vec<(String, Vec<u32>)> {
-    let mut buckets: std::collections::HashMap<String, Vec<u32>> =
-        std::collections::HashMap::new();
+/// Parse lsof field output. A process record starts with `p`, `c` carries its
+/// command name, and `n` carries the cwd selected by `-d cwd`.
+fn parse_lsof_output(stdout: &str) -> Vec<(&str, &str)> {
+    let mut provider = None;
+    let mut detected = Vec::new();
     for line in stdout.lines() {
-        let line = line.trim();
-        let mut parts = line.splitn(2, char::is_whitespace);
-        let (Some(pid_str), Some(comm)) = (parts.next(), parts.next()) else {
-            continue;
-        };
-        let comm = comm.trim();
-        if comm.is_empty() {
-            continue;
+        if line.starts_with('p') {
+            provider = None;
+        } else if let Some(command) = line.strip_prefix('c') {
+            provider = AGENT_PROCESS_NAMES
+                .iter()
+                .find_map(|(id, name)| (*name == command).then_some(*id));
+        } else if let (Some(id), Some(cwd)) = (provider, line.strip_prefix('n')) {
+            detected.push((id, cwd));
         }
-        let basename = comm.rsplit('/').next().unwrap_or(comm);
-        let Ok(pid) = pid_str.parse::<u32>() else {
-            continue;
-        };
-        buckets.entry(basename.to_string()).or_default().push(pid);
     }
-    buckets.into_iter().collect()
-}
-
-/// Working directory of a process by PID, via `lsof -F n -d cwd`. Returns
-/// `None` on any failure (process gone, lsof unavailable, weird output).
-async fn process_cwd(pid: u32) -> Option<String> {
-    let output = Command::new("lsof")
-        .args(["-p", &pid.to_string(), "-a", "-d", "cwd", "-F", "n"])
-        .output()
-        .await
-        .ok()?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    // `-F n` emits one field per line, each prefixed with a 1-char tag; the
-    // `n` (name) line carries the cwd. There can be multiple lines; take the
-    // first that decodes.
-    stdout
-        .lines()
-        .find_map(|l| l.strip_prefix('n').map(|s| s.to_string()))
+    detected
 }
 
 /// True if `cwd` equals `repo` or is a descendant of it. Exact-prefix match
@@ -182,48 +136,22 @@ mod tests {
         assert!(!path_contains("/Users/a/repos/foo", "/tmp/elsewhere"));
     }
 
-    fn pids_for<'a>(parsed: &'a [(String, Vec<u32>)], name: &str) -> &'a [u32] {
-        parsed
-            .iter()
-            .find(|(n, _)| n == name)
-            .map(|(_, v)| v.as_slice())
-            .unwrap_or(&[])
+    #[test]
+    fn parses_known_commands_and_cwds() {
+        let out =
+            "p101\ncclaude\nfcwd\nn/Users/a/repos/foo\np202\nccodex\nfcwd\nn/Users/a/repos/bar\n";
+        assert_eq!(
+            parse_lsof_output(out),
+            vec![
+                ("claude", "/Users/a/repos/foo"),
+                ("codex", "/Users/a/repos/bar"),
+            ]
+        );
     }
 
     #[test]
-    fn parses_padded_pids_and_bare_basenames() {
-        let out = "  101 claude\n  202 codex\n";
-        let parsed = parse_ps_output(out);
-        assert_eq!(pids_for(&parsed, "claude"), &[101]);
-        assert_eq!(pids_for(&parsed, "codex"), &[202]);
-    }
-
-    #[test]
-    fn extracts_basename_from_pathful_comm() {
-        let out = "303 /opt/homebrew/bin/claude\n";
-        let parsed = parse_ps_output(out);
-        assert_eq!(pids_for(&parsed, "claude"), &[303]);
-    }
-
-    #[test]
-    fn buckets_multiple_pids_for_same_command() {
-        let out = "1 claude\n2 claude\n3 claude\n";
-        let parsed = parse_ps_output(out);
-        assert_eq!(pids_for(&parsed, "claude"), &[1, 2, 3]);
-    }
-
-    #[test]
-    fn drops_unparseable_lines() {
-        let out = "not-a-number claude\nabc\n\n42 codex\n";
-        let parsed = parse_ps_output(out);
-        assert_eq!(pids_for(&parsed, "claude"), &[] as &[u32]);
-        assert_eq!(pids_for(&parsed, "codex"), &[42]);
-    }
-
-    #[test]
-    fn ignores_empty_comm() {
-        let out = "55 \n66 codex\n";
-        let parsed = parse_ps_output(out);
-        assert_eq!(pids_for(&parsed, "codex"), &[66]);
+    fn ignores_prefix_matches_and_incomplete_records() {
+        let out = "p1\nccodex-code-mode-host\nfcwd\nn/tmp/host\np2\nccodex\nfcwd\np3\nn/tmp/missing-command\n";
+        assert!(parse_lsof_output(out).is_empty());
     }
 }

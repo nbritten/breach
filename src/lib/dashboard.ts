@@ -44,24 +44,21 @@ export function repoFilterLabel(filter: RepoFilter): string {
   ];
 }
 
-/**
- * True if `name` shows up as the `repo` field of any PR the user authored
- * or was requested as a reviewer on. Linear scan — PR lists are small.
- */
-function hasOpenPr(name: string, prs: MyPrs): boolean {
+function openPrRepoNames(prs: MyPrs): Set<string> {
+  const names = new Set<string>();
   for (const list of Object.values(prs.authored)) {
-    if (list.some((p) => p.repo === name)) return true;
+    for (const pr of list) names.add(pr.repo);
   }
   for (const list of Object.values(prs.review_requested)) {
-    if (list.some((p) => p.repo === name)) return true;
+    for (const pr of list) names.add(pr.repo);
   }
-  return false;
+  return names;
 }
 
 function matchesFilter(
   repo: RepoSummary,
   filter: RepoFilter,
-  prs: MyPrs,
+  prRepos: ReadonlySet<string>,
   ciByPath: Record<string, CiStatus>,
   agents: Record<string, ReadonlySet<AgentProvider>>,
 ): boolean {
@@ -77,7 +74,7 @@ function matchesFilter(
     case "ahead":
       return repo.ahead > 0;
     case "open-prs":
-      return hasOpenPr(repo.name, prs);
+      return prRepos.has(repo.name);
     case "failing-ci":
       return ciByPath[repo.path]?.state === "failure";
     default:
@@ -102,8 +99,12 @@ export function filterByChips(
   agents: Record<string, ReadonlySet<AgentProvider>> = {},
 ): RepoSummary[] {
   if (active.size === 0) return repos;
+  const filters = [...active];
+  const prRepos = filters.includes("open-prs")
+    ? openPrRepoNames(prs)
+    : new Set<string>();
   return repos.filter((r) =>
-    [...active].some((f) => matchesFilter(r, f, prs, ciByPath, agents)),
+    filters.some((f) => matchesFilter(r, f, prRepos, ciByPath, agents)),
   );
 }
 
@@ -121,9 +122,15 @@ export function repoFilterCounts(
   const counts = Object.fromEntries(
     REPO_FILTER_ORDER.map((f) => [f, 0] as const),
   ) as Record<RepoFilter, number>;
+  const prRepos = openPrRepoNames(prs);
   for (const r of repos) {
-    for (const f of REPO_FILTER_ORDER) {
-      if (matchesFilter(r, f, prs, ciByPath, agents)) counts[f]++;
+    if (r.dirty) counts.dirty++;
+    if (r.behind > 0) counts.behind++;
+    if (r.ahead > 0) counts.ahead++;
+    if (prRepos.has(r.name)) counts["open-prs"]++;
+    if (ciByPath[r.path]?.state === "failure") counts["failing-ci"]++;
+    for (const provider of agents[r.path] ?? []) {
+      counts[`agent:${provider}`]++;
     }
   }
   return counts;
@@ -164,9 +171,10 @@ export function groupRepos(
     return [{ key: "__all__", label: "", repos }];
   }
   const pinSet = new Set(pinnedOrder);
+  const pinIndex = new Map(pinnedOrder.map((name, index) => [name, index]));
   const pinned = repos.filter((r) => pinSet.has(r.name));
   pinned.sort(
-    (a, b) => pinnedOrder.indexOf(a.name) - pinnedOrder.indexOf(b.name),
+    (a, b) => (pinIndex.get(a.name) ?? 0) - (pinIndex.get(b.name) ?? 0),
   );
   const other = repos.filter((r) => !pinSet.has(r.name));
   const sections: Section[] = [];

@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { DiffFile, DiffModeEnum, DiffView as GitDiffView } from "@git-diff-view/react";
-import { getDiffViewHighlighter } from "@git-diff-view/shiki";
-import type { BundledLanguage, DiffHighlighter } from "@git-diff-view/shiki";
+import { memo, useMemo, useState } from "react";
 import {
-  diffRenderMode,
+  parseSplitDiff,
   parseUnifiedDiff,
-  type DiffRenderMode,
+  shouldDeferDiff,
+  type DiffSide,
   type ParsedFile,
 } from "../lib/parseDiff";
 
@@ -13,36 +11,6 @@ interface Props {
   diff: string;
   empty?: string;
 }
-
-const HIGHLIGHT_LANGS: BundledLanguage[] = [
-  "typescript",
-  "tsx",
-  "javascript",
-  "jsx",
-  "json",
-  "css",
-  "html",
-  "markdown",
-  "rust",
-  "python",
-  "go",
-  "bash",
-  "yaml",
-  "toml",
-  "sql",
-  "ruby",
-  "java",
-  "kotlin",
-  "swift",
-];
-
-let highlighterPromise: Promise<DiffHighlighter> | null = null;
-const getHighlighter = () => {
-  if (!highlighterPromise) {
-    highlighterPromise = getDiffViewHighlighter(HIGHLIGHT_LANGS);
-  }
-  return highlighterPromise;
-};
 
 const STATUS_BADGE: Record<ParsedFile["status"], { label: string; cls: string }> = {
   added: { label: "added", cls: "bg-emerald-500/15 text-emerald-300" },
@@ -52,58 +20,75 @@ const STATUS_BADGE: Record<ParsedFile["status"], { label: string; cls: string }>
 };
 
 /**
- * How many files mount in the first render pass. DiffFile construction runs
- * inside each FileCard, so files past this count cost nothing until the user
- * clicks "Show more" — that single cap bounds both React commit size and the
- * synchronous diff-model work for wide diffs (e.g. a big rename or vendored
- * directory). 20 comfortably covers typical working-tree diffs.
+ * How many files mount in the first render pass. Files past this count cost
+ * nothing until the user clicks "Show more", bounding React commit size for
+ * wide diffs such as a generated directory rename.
  */
 const INITIAL_VISIBLE_FILES = 20;
 
 /**
- * One file of the diff. Owning the DiffFile instance here (rather than in a
- * parent-level useMemo over every parsed file) means unmounted files — those
- * past the "Show more" cutoff — and deferred large files do zero work until
- * they actually appear.
+ * One file of the diff. Split rows are owned by the conditional RenderedDiff,
+ * so collapsed, deferred, and not-yet-visible files do no line-model work.
  */
+const SIDE_CLASS: Record<DiffSide["kind"], string> = {
+  context: "bg-neutral-950 text-neutral-300",
+  addition: "bg-emerald-950/45 text-emerald-100",
+  deletion: "bg-rose-950/45 text-rose-100",
+  empty: "bg-neutral-950/70",
+};
+const SIDE_PREFIX: Record<DiffSide["kind"], string> = {
+  context: " ",
+  addition: "+",
+  deletion: "-",
+  empty: " ",
+};
+
+function DiffSideCell({ side }: { side: DiffSide }) {
+  return (
+    <div className={`grid grid-cols-[3.5rem_minmax(0,1fr)] min-w-0 ${SIDE_CLASS[side.kind]}`}>
+      <span className="px-2 py-px text-right text-neutral-600 select-none border-r border-neutral-800/70">
+        {side.lineNumber}
+      </span>
+      <pre className="px-2 py-px whitespace-pre overflow-visible min-h-[1.25rem]">
+        {SIDE_PREFIX[side.kind]}
+        {side.text}
+      </pre>
+    </div>
+  );
+}
+
+const RenderedDiff = memo(function RenderedDiff({ body }: { body: string }) {
+  const rows = useMemo(() => parseSplitDiff(body), [body]);
+  return (
+    <div className="overflow-x-auto text-[13px] leading-5 font-mono">
+      <div className="min-w-[64rem]">
+        {rows.map((row, index) =>
+          row.kind === "hunk" ? (
+            <div
+              key={index}
+              className="px-3 py-1 bg-sky-950/40 text-sky-300 border-y border-sky-900/30"
+            >
+              {row.text}
+            </div>
+          ) : (
+            <div key={index} className="grid grid-cols-2">
+              <DiffSideCell side={row.old} />
+              <DiffSideCell side={row.new} />
+            </div>
+          ),
+        )}
+      </div>
+    </div>
+  );
+});
+
 function FileCard({ meta }: { meta: ParsedFile }) {
-  const mode: DiffRenderMode = diffRenderMode(meta);
+  const deferred = shouldDeferDiff(meta);
   // Deferred files stay as a cheap placeholder until the user opts in. A
   // card never survives across diffs — the parent keys it by diff generation
-  // so switching diffs remounts it — which is what makes this initializer
-  // (and the useMemo below) safe: `meta` can't change under a live card, so
-  // a stale `loaded` can never pair with a bigger file and build its model.
-  const [loaded, setLoaded] = useState(mode !== "deferred");
+  // so switching diffs remounts it, keeping the initializer in sync with meta.
+  const [loaded, setLoaded] = useState(!deferred);
   const [open, setOpen] = useState(true);
-
-  const diffFile = useMemo(() => {
-    if (!loaded || meta.isBinary) return null;
-    const df = DiffFile.createInstance({
-      oldFile: { fileName: meta.oldPath },
-      newFile: { fileName: meta.newPath },
-      hunks: [meta.body],
-    });
-    df.init();
-    df.initTheme("dark");
-    df.buildSplitDiffLines();
-    return df;
-  }, [loaded, meta]);
-
-  // Shiki loads asynchronously and initSyntax is the priciest per-file step,
-  // so only "full"-mode (small) files get it. The inner <GitDiffView>
-  // subscribes to DiffFile itself, so notifyAll() is all it takes to repaint.
-  useEffect(() => {
-    if (!diffFile || mode !== "full") return;
-    let cancelled = false;
-    getHighlighter().then((hl) => {
-      if (cancelled) return;
-      diffFile.initSyntax({ registerHighlighter: hl });
-      diffFile.notifyAll();
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [diffFile, mode]);
 
   const badge = STATUS_BADGE[meta.status];
   const changed = meta.additions + meta.deletions;
@@ -143,7 +128,7 @@ function FileCard({ meta }: { meta: ParsedFile }) {
         )}
       </button>
       {open && (
-        <div className="diff-view-wrapper">
+        <div>
           {meta.isBinary ? (
             <div className="px-4 py-6 text-sm text-neutral-500 italic">
               Binary file not shown.
@@ -161,16 +146,9 @@ function FileCard({ meta }: { meta: ParsedFile }) {
                 Load diff
               </button>
             </div>
-          ) : diffFile ? (
-            <GitDiffView
-              diffFile={diffFile}
-              diffViewMode={DiffModeEnum.Split}
-              diffViewTheme="dark"
-              diffViewHighlight={mode === "full"}
-              diffViewFontSize={13}
-              diffViewWrap={false}
-            />
-          ) : null}
+          ) : (
+            <RenderedDiff body={meta.body} />
+          )}
         </div>
       )}
     </div>
@@ -186,9 +164,7 @@ export function DiffView({ diff, empty = "No changes." }: Props) {
   // force the next diff to mount everything at once — and bump `generation`,
   // which is part of every card's key. The new key remounts each card, and a
   // remount is the only reset that's safe here: re-deriving state inside a
-  // surviving card runs the rest of its render (including the DiffFile
-  // useMemo) once with the stale `loaded` before React retries, which would
-  // synchronously build the model for a file the new diff wants deferred.
+  // surviving card could briefly pair stale `loaded` state with a new file.
   // This render-phase setState is fine, by contrast: React retries the
   // *parent* before rendering children, so no card ever sees a stale key.
   const [generation, setGeneration] = useState(0);
