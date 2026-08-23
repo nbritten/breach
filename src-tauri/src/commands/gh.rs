@@ -4,18 +4,28 @@ use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::fs;
 use tokio::process::Command;
 
 use super::{expand, MAX_PARALLEL};
 
+static GH_CONFIRMED_AVAILABLE: AtomicBool = AtomicBool::new(false);
+
 pub(crate) async fn gh_available() -> bool {
-    Command::new("gh")
+    if GH_CONFIRMED_AVAILABLE.load(Ordering::Relaxed) {
+        return true;
+    }
+    let available = Command::new("gh")
         .arg("--version")
         .output()
         .await
         .map(|o| o.status.success())
-        .unwrap_or(false)
+        .unwrap_or(false);
+    if available {
+        GH_CONFIRMED_AVAILABLE.store(true, Ordering::Relaxed);
+    }
+    available
 }
 
 /// The login of the gh-authed user (e.g. `nbritten`). Used by onboarding to pre-seed
@@ -127,9 +137,7 @@ async fn fetch_ci_for(req: CiRequest) -> (String, Option<CiStatus>) {
 /// For each (repo path, branch) pair, return the most recent GitHub Actions run's state.
 /// Repos without a resolvable origin slug, empty branch, or no matching runs are skipped.
 #[tauri::command]
-pub async fn list_ci_status(
-    repos: Vec<CiRequest>,
-) -> Result<HashMap<String, CiStatus>, String> {
+pub async fn list_ci_status(repos: Vec<CiRequest>) -> Result<HashMap<String, CiStatus>, String> {
     if repos.is_empty() {
         return Ok(HashMap::new());
     }
@@ -231,8 +239,8 @@ async fn run_pr_search(org: String, role: PrRole) -> Result<Vec<PrInfo>, String>
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let raw: Vec<RawPr> = serde_json::from_str(&stdout)
-        .map_err(|e| format!("parse {} prs: {e}", role.label()))?;
+    let raw: Vec<RawPr> =
+        serde_json::from_str(&stdout).map_err(|e| format!("parse {} prs: {e}", role.label()))?;
     Ok(raw
         .into_iter()
         .map(|p| PrInfo {
@@ -263,8 +271,10 @@ pub async fn list_my_prs(orgs: Vec<String>) -> Result<MyPrs, String> {
     }
 
     let tasks = orgs.into_iter().map(|org| async move {
-        let a = run_pr_search(org.clone(), PrRole::Authored).await;
-        let r = run_pr_search(org.clone(), PrRole::ReviewRequested).await;
+        let (a, r) = tokio::join!(
+            run_pr_search(org.clone(), PrRole::Authored),
+            run_pr_search(org.clone(), PrRole::ReviewRequested),
+        );
         (org, a, r)
     });
     for (org, a, r) in join_all(tasks).await {
@@ -317,7 +327,15 @@ pub struct CloneResult {
 async fn list_org_repos(org: &str) -> Result<Vec<String>, String> {
     let output = Command::new("gh")
         .args([
-            "repo", "list", org, "--limit", "1000", "--no-archived", "--json", "name", "--jq",
+            "repo",
+            "list",
+            org,
+            "--limit",
+            "1000",
+            "--no-archived",
+            "--json",
+            "name",
+            "--jq",
             ".[].name",
         ])
         .output()
@@ -349,13 +367,28 @@ pub async fn list_missing_repos(
     }
     let root = expand(&repos_path);
 
+    // Snapshot existing target names once. Checking `root/name.exists()` for
+    // every remote repo turns a 1,000-repo org into 1,000 blocking stat calls.
+    let mut local_names = std::collections::HashSet::new();
+    if let Ok(mut entries) = fs::read_dir(&root).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            if let Some(name) = entry.file_name().to_str() {
+                local_names.insert(name.to_string());
+            }
+        }
+    }
+
+    let orgs: Vec<String> = orgs
+        .into_iter()
+        .map(|org| org.trim().to_string())
+        .filter(|org| !org.is_empty())
+        .collect();
+    let listings = join_all(orgs.iter().map(|org| list_org_repos(org))).await;
     let mut slugs: Vec<String> = Vec::new();
-    for org in orgs.iter().map(|s| s.trim()).filter(|s| !s.is_empty()) {
-        let names = list_org_repos(org)
-            .await
-            .map_err(|e| format!("listing org {org}: {e}"))?;
+    for (org, listing) in orgs.iter().zip(listings) {
+        let names = listing.map_err(|e| format!("listing org {org}: {e}"))?;
         for n in names {
-            if !root.join(&n).exists() {
+            if !local_names.contains(&n) {
                 slugs.push(format!("{org}/{n}"));
             }
         }

@@ -6,7 +6,7 @@ pub mod watcher;
 pub mod shell;
 pub mod sync;
 
-use crate::git;
+use futures::stream::{self, StreamExt};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
@@ -40,15 +40,23 @@ pub async fn scan_git_repos(root: &Path) -> Result<Vec<PathBuf>, String> {
         Err(e) => return Err(format!("cannot read {}: {e}", root.display())),
     };
 
-    let mut candidates = Vec::new();
+    let mut paths = Vec::new();
     while let Some(entry) = entries.next_entry().await.map_err(|e| e.to_string())? {
-        let path = entry.path();
-        if let Ok(meta) = fs::metadata(&path).await {
-            if meta.is_dir() && git::is_git_repo(&path) {
-                candidates.push(path);
-            }
-        }
+        paths.push(entry.path());
     }
+    let checks = paths.into_iter().map(|path| async move {
+        let is_dir = fs::metadata(&path)
+            .await
+            .map(|meta| meta.is_dir())
+            .unwrap_or(false);
+        let has_git = is_dir && fs::metadata(path.join(".git")).await.is_ok();
+        has_git.then_some(path)
+    });
+    let checked: Vec<Option<PathBuf>> = stream::iter(checks)
+        .buffer_unordered(MAX_PARALLEL)
+        .collect()
+        .await;
+    let mut candidates: Vec<PathBuf> = checked.into_iter().flatten().collect();
     candidates.sort();
     Ok(candidates)
 }
@@ -56,6 +64,7 @@ pub async fn scan_git_repos(root: &Path) -> Result<Vec<PathBuf>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn home() -> PathBuf {
         PathBuf::from("/Users/tester")
@@ -120,5 +129,28 @@ mod tests {
         let nowhere = PathBuf::from("/this/path/should/not/exist/by/any/chance");
         let result = scan_git_repos(&nowhere).await;
         assert_eq!(result, Ok(vec![]));
+    }
+
+    #[tokio::test]
+    async fn scan_finds_repos_without_spawning_git() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("breach-scan-test-{}-{unique}", std::process::id()));
+        let repo = root.join("repo");
+        let worktree = root.join("worktree");
+        fs::create_dir_all(repo.join(".git")).await.unwrap();
+        fs::create_dir_all(&worktree).await.unwrap();
+        fs::write(worktree.join(".git"), "gitdir: ../repo/.git/worktrees/test")
+            .await
+            .unwrap();
+        fs::create_dir_all(root.join("ordinary-dir")).await.unwrap();
+
+        let found = scan_git_repos(&root).await.unwrap();
+        assert_eq!(found, vec![repo, worktree]);
+
+        fs::remove_dir_all(root).await.unwrap();
     }
 }
