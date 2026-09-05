@@ -18,6 +18,12 @@ const SERVICE_REPOS_KEY = "serviceRepos";
 const TERMINAL_APP_KEY = "terminalApp";
 const CHECK_FOR_UPDATES_KEY = "checkForUpdates";
 const DEMO_MODE_KEY = "demoMode";
+const TERMINAL_WORKSPACE_KEY = "terminalWorkspace";
+
+export type SavedTerminalWorkspace = {
+  sessions: { cwd: string; title: string }[];
+  activeIndex: number;
+};
 
 export const FALLBACK_DEFAULT_BRANCH = "main";
 
@@ -130,6 +136,53 @@ export async function getDemoMode(): Promise<boolean> {
 export async function setDemoMode(enabled: boolean): Promise<void> {
   await store.set(DEMO_MODE_KEY, enabled);
   await store.save();
+}
+
+// Terminal workspace state is intentionally local rather than part of the
+// settings export: it contains machine-specific paths and describes running
+// context, not a portable preference.
+export async function getTerminalWorkspace(): Promise<SavedTerminalWorkspace> {
+  const saved = await store.get<unknown>(TERMINAL_WORKSPACE_KEY);
+  return normalizeTerminalWorkspace(saved);
+}
+
+export async function setTerminalWorkspace(
+  workspace: SavedTerminalWorkspace,
+): Promise<void> {
+  await store.set(TERMINAL_WORKSPACE_KEY, workspace);
+  await store.save();
+}
+
+export function normalizeTerminalWorkspace(
+  value: unknown,
+): SavedTerminalWorkspace {
+  const empty = { sessions: [], activeIndex: 0 };
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return empty;
+  }
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.sessions)) return empty;
+  const sessions = record.sessions.flatMap((entry) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      return [];
+    }
+    const session = entry as Record<string, unknown>;
+    if (typeof session.cwd !== "string" || !session.cwd.trim()) return [];
+    const title =
+      typeof session.title === "string" && session.title.trim()
+        ? session.title.trim()
+        : session.cwd.replace(/\/+$/, "").split("/").pop() || session.cwd;
+    return [{ cwd: session.cwd, title }];
+  });
+  const requested =
+    typeof record.activeIndex === "number" &&
+    Number.isInteger(record.activeIndex)
+      ? record.activeIndex
+      : 0;
+  return {
+    sessions,
+    activeIndex: Math.max(0, Math.min(requested, sessions.length - 1)),
+  };
 }
 
 /**
