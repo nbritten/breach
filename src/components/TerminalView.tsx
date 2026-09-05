@@ -61,7 +61,7 @@ export function TerminalView() {
     let frame = window.requestAnimationFrame(() => {
       fitAddon.fit();
       for (const line of FIXTURE.slice(0, -1)) terminal.writeln(line);
-      terminal.write(FIXTURE.at(-1) ?? "");
+      terminal.write(FIXTURE[FIXTURE.length - 1] ?? "");
       terminal.focus();
     });
 
