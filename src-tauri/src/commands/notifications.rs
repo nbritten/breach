@@ -37,7 +37,10 @@ pub async fn pr_notifications_changed(
         return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
     }
 
-    parse_response(&String::from_utf8_lossy(&out.stdout), last_modified.as_deref())
+    parse_response(
+        &String::from_utf8_lossy(&out.stdout),
+        last_modified.as_deref(),
+    )
 }
 
 fn parse_response(raw: &str, prev_lm: Option<&str>) -> Result<NotificationPoll, String> {
@@ -68,8 +71,14 @@ fn parse_response(raw: &str, prev_lm: Option<&str>) -> Result<NotificationPoll, 
     let last_modified = new_lm.or_else(|| prev_lm.map(str::to_string));
 
     match code {
-        200 => Ok(NotificationPoll { changed: true, last_modified }),
-        304 => Ok(NotificationPoll { changed: false, last_modified }),
+        200 => Ok(NotificationPoll {
+            changed: true,
+            last_modified,
+        }),
+        304 => Ok(NotificationPoll {
+            changed: false,
+            last_modified,
+        }),
         _ => Err(format!("HTTP {code}")),
     }
 }

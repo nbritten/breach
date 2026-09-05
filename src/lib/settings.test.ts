@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { branchForRepo, buildServiceUrl, FALLBACK_DEFAULT_BRANCH } from "./settings";
+import {
+  branchForRepo,
+  buildServiceUrl,
+  FALLBACK_DEFAULT_BRANCH,
+  normalizeTerminalWorkspace,
+} from "./settings";
 
 describe("branchForRepo", () => {
   it("returns override when present", () => {
@@ -58,5 +63,48 @@ describe("buildServiceUrl", () => {
 
   it("returns null for empty repo name", () => {
     expect(buildServiceUrl("https://{name}.example.com", "")).toBeNull();
+  });
+});
+
+describe("normalizeTerminalWorkspace", () => {
+  it("keeps valid sessions and clamps the active index", () => {
+    expect(
+      normalizeTerminalWorkspace({
+        sessions: [
+          { cwd: "/repos/breach", title: "Breach" },
+          { cwd: "/repos/site", title: "Site" },
+        ],
+        activeIndex: 20,
+      }),
+    ).toEqual({
+      sessions: [
+        { cwd: "/repos/breach", title: "Breach" },
+        { cwd: "/repos/site", title: "Site" },
+      ],
+      activeIndex: 1,
+    });
+  });
+
+  it("drops invalid entries and derives missing titles", () => {
+    expect(
+      normalizeTerminalWorkspace({
+        sessions: [
+          { cwd: "/repos/breach", title: "" },
+          { cwd: "", title: "invalid" },
+          null,
+        ],
+        activeIndex: -2,
+      }),
+    ).toEqual({
+      sessions: [{ cwd: "/repos/breach", title: "breach" }],
+      activeIndex: 0,
+    });
+  });
+
+  it("falls back to an empty workspace for malformed state", () => {
+    expect(normalizeTerminalWorkspace("broken")).toEqual({
+      sessions: [],
+      activeIndex: 0,
+    });
   });
 });

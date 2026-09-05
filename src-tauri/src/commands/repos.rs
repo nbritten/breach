@@ -16,10 +16,11 @@ pub async fn list_repos(repos_path: String, scan_nested: bool) -> Result<Vec<Rep
     let root = expand(&repos_path);
     let candidates = scan_git_repos(&root, scan_nested).await?;
 
-    let mut summaries: Vec<RepoSummary> = stream::iter(candidates.into_iter().map(git::repo_summary))
-        .buffer_unordered(MAX_PARALLEL)
-        .collect()
-        .await;
+    let mut summaries: Vec<RepoSummary> =
+        stream::iter(candidates.into_iter().map(git::repo_summary))
+            .buffer_unordered(MAX_PARALLEL)
+            .collect()
+            .await;
     summaries.sort_by(|a, b| a.name.cmp(&b.name).then(a.path.cmp(&b.path)));
     Ok(summaries)
 }
@@ -89,8 +90,12 @@ pub fn expand_path(path: String) -> String {
 }
 
 pub(crate) fn home_relative_with_home(path: &str, home: Option<PathBuf>) -> String {
-    let Some(home) = home else { return path.to_string() };
-    let Some(home_str) = home.to_str() else { return path.to_string() };
+    let Some(home) = home else {
+        return path.to_string();
+    };
+    let Some(home_str) = home.to_str() else {
+        return path.to_string();
+    };
     if path == home_str {
         return "~".to_string();
     }

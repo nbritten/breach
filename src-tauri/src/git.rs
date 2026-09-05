@@ -1,6 +1,10 @@
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 use tokio::process::Command;
+use tokio::sync::RwLock;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct RepoSummary {
@@ -36,6 +40,7 @@ pub struct DirtyFile {
 
 pub async fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
     let output = Command::new("git")
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .arg("-C")
         .arg(repo)
         .args(args)
@@ -124,7 +129,15 @@ pub async fn repo_summary(path: PathBuf) -> RepoSummary {
     };
     summary.origin_slug = origin_slug(&path).await;
 
-    let status = match git(&path, &["status", "--porcelain=v2", "--branch"]).await {
+    let (status, last_commit) = tokio::join!(
+        git(&path, &["status", "--porcelain=v2", "--branch"]),
+        git(
+            &path,
+            &["log", "-1", "--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%ct",],
+        ),
+    );
+
+    let status = match status {
         Ok(s) => s,
         Err(e) => {
             summary.error = Some(e);
@@ -145,29 +158,8 @@ pub async fn repo_summary(path: PathBuf) -> RepoSummary {
         }
     }
 
-    if let Ok(out) = git(
-        &path,
-        &[
-            "log",
-            "-1",
-            "--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%ct",
-        ],
-    )
-    .await
-    {
-        let trimmed = out.trim();
-        if !trimmed.is_empty() {
-            let parts: Vec<&str> = trimmed.split('\x1f').collect();
-            if parts.len() == 5 {
-                summary.last_commit = Some(CommitInfo {
-                    sha: parts[0].to_string(),
-                    short_sha: parts[1].to_string(),
-                    subject: parts[2].to_string(),
-                    author: parts[3].to_string(),
-                    timestamp: parts[4].parse().unwrap_or(0),
-                });
-            }
-        }
+    if let Ok(out) = last_commit {
+        summary.last_commit = parse_commit_line(out.trim());
     }
 
     summary
@@ -221,6 +213,12 @@ pub async fn sync_to_default(path: &Path, branch: &str) -> Result<(), String> {
     if is_dirty(path).await? {
         return Err("Working tree is dirty — Clean first.".into());
     }
+    sync_clean_to_default(path, branch).await
+}
+
+/// Sync a repo that the caller has already verified is clean. Keeping this
+/// separate avoids a second `git status` in the bulk-sync path.
+pub async fn sync_clean_to_default(path: &Path, branch: &str) -> Result<(), String> {
     git(path, &["fetch", "origin", branch]).await?;
     git(path, &["checkout", branch]).await?;
     let remote_ref = format!("origin/{branch}");
@@ -258,35 +256,43 @@ pub fn parse_slug(url: &str) -> Option<String> {
 
 /// Get the `org/name` slug from the origin remote of a local repo.
 pub async fn origin_slug(path: &Path) -> Option<String> {
+    const CACHE_TTL: Duration = Duration::from_secs(300);
+    static CACHE: OnceLock<RwLock<HashMap<PathBuf, (Instant, String)>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| RwLock::new(HashMap::new()));
+    if let Some((cached_at, slug)) = cache.read().await.get(path) {
+        if cached_at.elapsed() < CACHE_TTL {
+            return Some(slug.clone());
+        }
+    }
     let out = git(path, &["remote", "get-url", "origin"]).await.ok()?;
-    parse_slug(&out)
+    let slug = parse_slug(&out)?;
+    cache
+        .write()
+        .await
+        .insert(path.to_path_buf(), (Instant::now(), slug.clone()));
+    Some(slug)
 }
 
 pub async fn recent_commits(path: &Path, limit: u32) -> Result<Vec<CommitInfo>, String> {
     let n = format!("-{}", limit);
     let out = git(
         path,
-        &[
-            "log",
-            &n,
-            "--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%ct",
-        ],
+        &["log", &n, "--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%ct"],
     )
     .await?;
-    let mut commits = Vec::new();
-    for line in out.lines() {
-        let parts: Vec<&str> = line.split('\x1f').collect();
-        if parts.len() == 5 {
-            commits.push(CommitInfo {
-                sha: parts[0].to_string(),
-                short_sha: parts[1].to_string(),
-                subject: parts[2].to_string(),
-                author: parts[3].to_string(),
-                timestamp: parts[4].parse().unwrap_or(0),
-            });
-        }
-    }
-    Ok(commits)
+    Ok(out.lines().filter_map(parse_commit_line).collect())
+}
+
+fn parse_commit_line(line: &str) -> Option<CommitInfo> {
+    let mut parts = line.split('\x1f');
+    let commit = CommitInfo {
+        sha: parts.next()?.to_string(),
+        short_sha: parts.next()?.to_string(),
+        subject: parts.next()?.to_string(),
+        author: parts.next()?.to_string(),
+        timestamp: parts.next()?.parse().unwrap_or(0),
+    };
+    parts.next().is_none().then_some(commit)
 }
 
 #[cfg(test)]
@@ -455,5 +461,17 @@ mod tests {
         assert!(!gitdir_points_at_submodule(
             "gitdir: /tmp/repo/.git/worktrees/wt"
         ));
+    }
+
+    #[test]
+    fn parses_commit_without_allocating_field_vector() {
+        let commit = parse_commit_line("abcdef\x1fabc123\x1fSpeed it up\x1fAda\x1f42").unwrap();
+        assert_eq!(commit.sha, "abcdef");
+        assert_eq!(commit.short_sha, "abc123");
+        assert_eq!(commit.subject, "Speed it up");
+        assert_eq!(commit.author, "Ada");
+        assert_eq!(commit.timestamp, 42);
+        assert!(parse_commit_line("too\x1ffew").is_none());
+        assert!(parse_commit_line("a\x1fb\x1fc\x1fd\x1f1\x1fextra").is_none());
     }
 }

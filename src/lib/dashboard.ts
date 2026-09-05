@@ -51,21 +51,17 @@ export function repoFilterLabel(filter: RepoFilter): string {
  * different GitHub repos do not share badges. Falls back to basename when
  * there is no remote (tests, missing origin).
  */
-function hasOpenPr(repo: RepoSummary, prs: MyPrs): boolean {
-  if (repo.origin_slug) {
-    const k = repo.origin_slug;
-    return (
-      (prs.authored[k]?.length ?? 0) > 0 ||
-      (prs.review_requested[k]?.length ?? 0) > 0
-    );
+function openPrRepoKeys(prs: MyPrs): Set<string> {
+  const names = new Set<string>();
+  for (const [key, list] of Object.entries(prs.authored)) {
+    names.add(key);
+    for (const pr of list) names.add(pr.repo);
   }
-  for (const list of Object.values(prs.authored)) {
-    if (list.some((p) => p.repo === repo.name)) return true;
+  for (const [key, list] of Object.entries(prs.review_requested)) {
+    names.add(key);
+    for (const pr of list) names.add(pr.repo);
   }
-  for (const list of Object.values(prs.review_requested)) {
-    if (list.some((p) => p.repo === repo.name)) return true;
-  }
-  return false;
+  return names;
 }
 
 /** PRs attached to this checkout: slug map first, then basename for demos. */
@@ -82,7 +78,7 @@ export function prsForRepo(
 function matchesFilter(
   repo: RepoSummary,
   filter: RepoFilter,
-  prs: MyPrs,
+  prRepos: ReadonlySet<string>,
   ciByPath: Record<string, CiStatus>,
   agents: Record<string, ReadonlySet<AgentProvider>>,
 ): boolean {
@@ -98,7 +94,9 @@ function matchesFilter(
     case "ahead":
       return repo.ahead > 0;
     case "open-prs":
-      return hasOpenPr(repo, prs);
+      return repo.origin_slug
+        ? prRepos.has(repo.origin_slug)
+        : prRepos.has(repo.name);
     case "failing-ci":
       return ciByPath[repo.path]?.state === "failure";
     default:
@@ -123,8 +121,12 @@ export function filterByChips(
   agents: Record<string, ReadonlySet<AgentProvider>> = {},
 ): RepoSummary[] {
   if (active.size === 0) return repos;
+  const filters = [...active];
+  const prRepos = filters.includes("open-prs")
+    ? openPrRepoKeys(prs)
+    : new Set<string>();
   return repos.filter((r) =>
-    [...active].some((f) => matchesFilter(r, f, prs, ciByPath, agents)),
+    filters.some((f) => matchesFilter(r, f, prRepos, ciByPath, agents)),
   );
 }
 
@@ -142,9 +144,17 @@ export function repoFilterCounts(
   const counts = Object.fromEntries(
     REPO_FILTER_ORDER.map((f) => [f, 0] as const),
   ) as Record<RepoFilter, number>;
+  const prRepos = openPrRepoKeys(prs);
   for (const r of repos) {
-    for (const f of REPO_FILTER_ORDER) {
-      if (matchesFilter(r, f, prs, ciByPath, agents)) counts[f]++;
+    if (r.dirty) counts.dirty++;
+    if (r.behind > 0) counts.behind++;
+    if (r.ahead > 0) counts.ahead++;
+    if (r.origin_slug ? prRepos.has(r.origin_slug) : prRepos.has(r.name)) {
+      counts["open-prs"]++;
+    }
+    if (ciByPath[r.path]?.state === "failure") counts["failing-ci"]++;
+    for (const provider of agents[r.path] ?? []) {
+      counts[`agent:${provider}`]++;
     }
   }
   return counts;

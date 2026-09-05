@@ -1,6 +1,6 @@
 [package]
 name = "breach"
-version = "0.5.12"
+version = "0.6.0"
 description = "A macOS dashboard for every local git repo."
 authors = ["natbritten"]
 edition = "2021"
@@ -31,4 +31,11 @@ dirs = "5"
 rlimit = "0.10"
 notify = "8"
 notify-debouncer-full = "0.5"
+portable-pty = "0.9"
 
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = 3
+panic = "abort"
+strip = true

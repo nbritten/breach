@@ -66,10 +66,7 @@ pub fn list_terminal_apps() -> Vec<String> {
 /// auto-detects the first installed terminal from the known set, falling back
 /// to Terminal. Returns the name of the app that was launched.
 #[tauri::command]
-pub async fn open_in_terminal(
-    repo_path: String,
-    app: Option<String>,
-) -> Result<String, String> {
+pub async fn open_in_terminal(repo_path: String, app: Option<String>) -> Result<String, String> {
     let path = PathBuf::from(&repo_path);
     let chosen = app
         .as_deref()

@@ -474,14 +474,18 @@ mod tests {
         let meta = root.join("project/.git/worktrees/feature-worktree");
         std::fs::create_dir_all(&checkout).unwrap();
         std::fs::create_dir_all(&meta).unwrap();
-        std::fs::write(checkout.join(".git"), format!("gitdir: {}\n", meta.display())).unwrap();
-        std::fs::write(meta.join("gitdir"), format!("{}\n", checkout.join(".git").display()))
-            .unwrap();
+        std::fs::write(
+            checkout.join(".git"),
+            format!("gitdir: {}\n", meta.display()),
+        )
+        .unwrap();
+        std::fs::write(
+            meta.join("gitdir"),
+            format!("{}\n", checkout.join(".git").display()),
+        )
+        .unwrap();
         let event = meta.join("HEAD");
-        assert_eq!(
-            repo_for_event(&event, &root, true),
-            Some(checkout),
-        );
+        assert_eq!(repo_for_event(&event, &root, true), Some(checkout),);
         let _ = std::fs::remove_dir_all(&root);
     }
 

@@ -150,7 +150,7 @@ export function useCiStatusPoll(
  * Periodic poll of which repos have an active coding-agent CLI session
  * (Claude, Codex, etc.) right now. Ticks while the window is visible, skips
  * when no repos are configured, swallows errors. Detection is a cheap
- * `ps + lsof` shell-out so a tight cadence is fine.
+ * targeted `lsof` shell-out so a tight cadence is fine.
  */
 export function useActiveAgentSessionsPoll(
   enabled: boolean,

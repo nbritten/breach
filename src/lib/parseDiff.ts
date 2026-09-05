@@ -12,6 +12,16 @@ export interface ParsedFile {
   deletions: number;
 }
 
+export interface DiffSide {
+  lineNumber: number | null;
+  text: string;
+  kind: "context" | "addition" | "deletion" | "empty";
+}
+
+export type SplitDiffRow =
+  | { kind: "hunk"; text: string }
+  | { kind: "lines"; old: DiffSide; new: DiffSide };
+
 const stripQuotes = (p: string) => {
   if (p.startsWith('"') && p.endsWith('"')) return p.slice(1, -1);
   return p;
@@ -30,13 +40,15 @@ const parseGitHeader = (line: string): { a: string; b: string } => {
 
 export function parseUnifiedDiff(raw: string): ParsedFile[] {
   if (!raw.trim()) return [];
-  const lines = raw.split("\n");
   const files: ParsedFile[] = [];
-  let headerLine: string | null = null;
-  let body: string[] = [];
+  let sectionStart = raw.indexOf("diff --git ");
 
-  const flush = () => {
-    if (!headerLine) return;
+  while (sectionStart !== -1) {
+    const nextSection = raw.indexOf("\ndiff --git ", sectionStart + 1);
+    const sectionEnd = nextSection === -1 ? raw.length : nextSection + 1;
+    const body = raw.slice(sectionStart, sectionEnd);
+    const headerEnd = body.indexOf("\n");
+    const headerLine = headerEnd === -1 ? body : body.slice(0, headerEnd);
     const { a, b } = parseGitHeader(headerLine);
     let status: ParsedFile["status"] = "modified";
     let isBinary = false;
@@ -49,7 +61,7 @@ export function parseUnifiedDiff(raw: string): ParsedFile[] {
     // lines without misreading `+++`/`---` file markers — or a removed line
     // whose content happens to start with `--` — as change lines.
     let inHunk = false;
-    for (const l of body) {
+    for (const l of body.split("\n")) {
       if (l.startsWith("@@")) {
         inHunk = true;
         continue;
@@ -70,56 +82,98 @@ export function parseUnifiedDiff(raw: string): ParsedFile[] {
       displayName,
       status,
       isBinary,
-      body: body.join("\n"),
+      body,
       additions,
       deletions,
     });
-  };
-
-  for (const line of lines) {
-    if (line.startsWith("diff --git ")) {
-      flush();
-      headerLine = line;
-      body = [line];
-    } else if (headerLine) {
-      body.push(line);
-    }
+    sectionStart = nextSection === -1 ? -1 : nextSection + 1;
   }
-  flush();
 
   return files;
 }
 
-// Everything in @git-diff-view (DiffFile.init, buildSplitDiffLines) and shiki
-// (initSyntax) runs synchronously on the main thread, so per-file cost scales
-// directly with changed-line count. These thresholds decide how much of that
-// work a file gets. Both are heuristics, not exact budgets — the goal is to
-// keep a single giant lockfile or generated file from freezing the window.
+const EMPTY_SIDE: DiffSide = {
+  lineNumber: null,
+  text: "",
+  kind: "empty",
+};
 
 /**
- * Files with more changed lines than this still render, but skip shiki
- * syntax highlighting (plain +/- coloring only). Highlighting is by far the
- * most expensive per-file step — shiki tokenizes both sides of the split
- * view — and past a few hundred lines nobody is reading token colors anyway.
+ * Convert unified hunks to aligned split-view rows. This deliberately parses
+ * only a mounted file, unlike the previous diff library which built multiple
+ * full line models for every visible file. Metadata before the first hunk is
+ * skipped because the file card already renders it more compactly.
  */
-export const HIGHLIGHT_CHANGED_LINE_LIMIT = 500;
+export function parseSplitDiff(body: string): SplitDiffRow[] {
+  const rows: SplitDiffRow[] = [];
+  let oldLine = 0;
+  let newLine = 0;
+  let inHunk = false;
+  let deletions: DiffSide[] = [];
+  let additions: DiffSide[] = [];
+
+  const flushChanges = () => {
+    const count = Math.max(deletions.length, additions.length);
+    for (let i = 0; i < count; i++) {
+      rows.push({
+        kind: "lines",
+        old: deletions[i] ?? EMPTY_SIDE,
+        new: additions[i] ?? EMPTY_SIDE,
+      });
+    }
+    deletions = [];
+    additions = [];
+  };
+
+  for (const line of body.split("\n")) {
+    if (line.startsWith("@@")) {
+      flushChanges();
+      const match = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+      oldLine = Number(match?.[1] ?? 0);
+      newLine = Number(match?.[2] ?? 0);
+      inHunk = true;
+      rows.push({ kind: "hunk", text: line });
+      continue;
+    }
+    if (!inHunk) continue;
+
+    if (line.startsWith("-")) {
+      deletions.push({
+        lineNumber: oldLine++,
+        text: line.slice(1),
+        kind: "deletion",
+      });
+    } else if (line.startsWith("+")) {
+      additions.push({
+        lineNumber: newLine++,
+        text: line.slice(1),
+        kind: "addition",
+      });
+    } else if (line.startsWith(" ")) {
+      flushChanges();
+      rows.push({
+        kind: "lines",
+        old: { lineNumber: oldLine++, text: line.slice(1), kind: "context" },
+        new: { lineNumber: newLine++, text: line.slice(1), kind: "context" },
+      });
+    } else if (line.startsWith("\\ No newline")) {
+      flushChanges();
+      rows.push({ kind: "hunk", text: line });
+    }
+  }
+  flushChanges();
+  return rows;
+}
 
 /**
  * Files with more changed lines than this aren't rendered at all until the
- * user asks: even building the DiffFile line model for a multi-thousand-line
- * lockfile takes long enough to visibly jank the UI. ~2000 lines keeps every
- * hand-written diff eagerly visible while deferring the generated-file cases
- * that caused freezes.
+ * user asks. The lightweight renderer is linear and allocation-conscious, but
+ * deferring generated files still avoids mounting thousands of DOM rows.
  */
 export const RENDER_CHANGED_LINE_LIMIT = 2000;
 
-export type DiffRenderMode = "full" | "plain" | "deferred";
-
-/** Classify how eagerly a parsed file should be rendered (see the threshold
- * constants above for the reasoning behind each tier). */
-export function diffRenderMode(file: Pick<ParsedFile, "additions" | "deletions">): DiffRenderMode {
-  const changed = file.additions + file.deletions;
-  if (changed > RENDER_CHANGED_LINE_LIMIT) return "deferred";
-  if (changed > HIGHLIGHT_CHANGED_LINE_LIMIT) return "plain";
-  return "full";
+export function shouldDeferDiff(
+  file: Pick<ParsedFile, "additions" | "deletions">,
+): boolean {
+  return file.additions + file.deletions > RENDER_CHANGED_LINE_LIMIT;
 }

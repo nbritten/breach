@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from "react";
+import { memo, useState, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { openTerminal } from "../lib/settings";
@@ -34,6 +34,8 @@ interface Props {
   ci?: CiStatus;
   activeAgents?: ReadonlySet<AgentProvider>;
   docsUrl?: string | null;
+  terminalActive?: boolean;
+  onOpenTerminal?: (path: string) => Promise<void>;
 }
 
 const CI_DOT: Record<
@@ -52,7 +54,7 @@ function prTooltip(prs: PrInfo[]): string {
     .join("\n");
 }
 
-export function RepoCard({
+export const RepoCard = memo(function RepoCard({
   repo,
   onRefresh,
   authoredPrs = [],
@@ -64,6 +66,8 @@ export function RepoCard({
   ci,
   activeAgents,
   docsUrl,
+  terminalActive = false,
+  onOpenTerminal,
 }: Props) {
   const slug = encodeURIComponent(repo.path);
   const [refreshing, setRefreshing] = useState(false);
@@ -147,6 +151,15 @@ export function RepoCard({
                 );
               },
             )}
+          {terminalActive && (
+            <span
+              title="Active Breach terminal"
+              aria-label="Active Breach terminal"
+              className="text-breach-pink shrink-0"
+            >
+              &gt;_
+            </span>
+          )}
           <div className="min-w-0">
             <h3 className="font-semibold truncate" title={repo.path}>
               {repo.name}
@@ -227,10 +240,10 @@ export function RepoCard({
             onClick={(e: MouseEvent) => {
               e.preventDefault();
               e.stopPropagation();
-              openTerminal(repo.path).catch(showError);
+              onOpenTerminal?.(repo.path).catch(showError);
             }}
-            title="Open in terminal"
-            aria-label="Open in terminal"
+            title="Open in Breach Terminal"
+            aria-label="Open in Breach Terminal"
             className="p-1 rounded text-neutral-500 hover:text-neutral-100 hover:bg-neutral-700/60"
           >
             <svg
@@ -246,6 +259,20 @@ export function RepoCard({
               <polyline points="4 17 10 11 4 5" />
               <line x1="12" y1="19" x2="20" y2="19" />
             </svg>
+          </button>
+          <button
+            onClick={(e: MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              openTerminal(repo.path).catch(showError);
+            }}
+            title="Open in external terminal"
+            aria-label="Open in external terminal"
+            className="p-1 rounded text-neutral-500 hover:text-neutral-100 hover:bg-neutral-700/60"
+          >
+            <span aria-hidden="true" className="text-xs leading-none">
+              ↗
+            </span>
           </button>
           <button
             onClick={handleRefresh}
@@ -322,4 +349,4 @@ export function RepoCard({
       ) : null}
     </Link>
   );
-}
+});

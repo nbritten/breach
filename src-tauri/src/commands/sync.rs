@@ -104,7 +104,7 @@ pub async fn sync_all(
                 Ok(false) => {}
             }
 
-            match git::sync_to_default(&p, &branch).await {
+            match git::sync_clean_to_default(&p, &branch).await {
                 Ok(()) => SyncResult {
                     name,
                     path: path_str,
