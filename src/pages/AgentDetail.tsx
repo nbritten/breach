@@ -1,41 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AGENT_INFO, AGENT_STATE_INFO } from "../lib/agents";
-import { api } from "../lib/api";
-import { getReposPath, getScanNestedRepos } from "../lib/settings";
+import { useAgentSessions } from "../lib/agentSessions";
 import { useTerminalSession } from "../lib/terminalSession";
-import type { AgentSession } from "../types";
 
 export function AgentDetail() {
   const { id = "" } = useParams();
   const sessionId = decodeURIComponent(id);
   const navigate = useNavigate();
   const { open: openTerminal } = useTerminalSession();
-  const [session, setSession] = useState<AgentSession | null | undefined>(
-    undefined,
-  );
+  const { sessions, loading } = useAgentSessions();
+  const session =
+    sessions.find((candidate) => candidate.id === sessionId) ?? null;
 
-  const refresh = useCallback(async () => {
-    const [reposPath, scanNested] = await Promise.all([
-      getReposPath(),
-      getScanNestedRepos(),
-    ]);
-    const repos = await api.listRepos(reposPath, scanNested);
-    const sessions = await api.listActiveAgentSessions(
-      repos.map((repo) => repo.path),
-    );
-    setSession(
-      sessions.find((candidate) => candidate.id === sessionId) ?? null,
-    );
-  }, [sessionId]);
-
-  useEffect(() => {
-    refresh().catch(() => setSession(null));
-    const timer = window.setInterval(() => refresh().catch(() => {}), 5_000);
-    return () => window.clearInterval(timer);
-  }, [refresh]);
-
-  if (session === undefined)
+  if (loading)
     return <div className="p-6 text-sm text-neutral-500">Loading agent…</div>;
   if (session === null) {
     return (

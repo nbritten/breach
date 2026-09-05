@@ -1,4 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { agentNeedsAttention } from "../lib/agents";
+import { useAgentSessions } from "../lib/agentSessions";
 
 const itemBase =
   "flex items-center justify-center w-10 h-10 rounded-lg transition-colors";
@@ -85,6 +87,8 @@ function SettingsIcon() {
 }
 
 export function Sidebar() {
+  const { sessions } = useAgentSessions();
+  const attentionCount = sessions.filter(agentNeedsAttention).length;
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const isGit = pathname === "/" || pathname.startsWith("/repo/");
@@ -127,12 +131,19 @@ export function Sidebar() {
       </Link>
       <Link
         to="/agents"
-        title="Agents"
+        title={
+          attentionCount > 0 ? `Agents · ${attentionCount} need you` : "Agents"
+        }
         aria-label="Agents"
         aria-current={isAgents ? "page" : undefined}
-        className={`${itemBase} ${isAgents ? active : inactive}`}
+        className={`${itemBase} relative ${isAgents ? active : inactive}`}
       >
         <AgentsIcon />
+        {attentionCount > 0 && (
+          <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-amber-400 px-1 text-center text-[10px] font-semibold leading-4 text-neutral-950">
+            {attentionCount > 9 ? "9+" : attentionCount}
+          </span>
+        )}
       </Link>
       <div className="flex-1" />
       <button
