@@ -7,6 +7,7 @@ import { SearchProvider } from "./lib/search";
 import { OnboardingProvider, useOnboarding } from "./lib/onboarding";
 import { ToastProvider } from "./lib/toast";
 import { TerminalSessionProvider } from "./lib/terminalSession";
+import { AgentSessionsProvider } from "./lib/agentSessions";
 import {
   getOnboarded,
   getPinnedRepos,
@@ -88,7 +89,7 @@ function AppShell() {
   }
 
   return (
-    <>
+    <AgentSessionsProvider>
       <div className="h-full flex flex-col">
         <TopBar />
         <div className="flex-1 flex overflow-hidden">
@@ -120,7 +121,7 @@ function AppShell() {
           />
         </Suspense>
       )}
-    </>
+    </AgentSessionsProvider>
   );
 }
 
