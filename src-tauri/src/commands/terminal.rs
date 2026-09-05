@@ -10,6 +10,8 @@ use tauri::{AppHandle, Emitter, State};
 const DEFAULT_COLS: u16 = 80;
 const DEFAULT_ROWS: u16 = 24;
 const READ_BUFFER_SIZE: usize = 8 * 1024;
+const OUTPUT_EVENT: &str = "terminal-output";
+const EXIT_EVENT: &str = "terminal-exit";
 
 #[derive(Clone, Serialize)]
 pub struct TerminalSessionInfo {
@@ -111,14 +113,6 @@ fn user_shell() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/bin/zsh"))
 }
 
-fn output_event(id: &str) -> String {
-    format!("terminal-output:{id}")
-}
-
-fn exit_event(id: &str) -> String {
-    format!("terminal-exit:{id}")
-}
-
 #[tauri::command]
 pub fn terminal_spawn(
     app: AppHandle,
@@ -182,7 +176,7 @@ pub fn terminal_spawn(
                 Ok(0) | Err(_) => break,
                 Ok(read) => {
                     let _ = output_app.emit(
-                        &output_event(&output_id),
+                        OUTPUT_EVENT,
                         TerminalOutput {
                             session_id: output_id.clone(),
                             data: buffer[..read].to_vec(),
@@ -207,7 +201,7 @@ pub fn terminal_spawn(
             .map(|status| (status.exit_code(), status.signal().map(str::to_string)))
             .unwrap_or((1, None));
         let _ = app.emit(
-            &exit_event(&id),
+            EXIT_EVENT,
             TerminalExit {
                 session_id: id,
                 exit_code,
