@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 
 /// Coding-agent CLIs we look for. Adding a new one is one line: append the
@@ -26,6 +26,22 @@ pub struct AgentSession {
     pub cwd: String,
     pub pid: u32,
     pub state: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<u64>,
+    pub connection: &'static str,
+}
+
+#[derive(Deserialize, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct ClaudeSession {
+    cwd: String,
+    kind: String,
+    name: String,
+    pid: u32,
+    session_id: String,
+    started_at: u64,
 }
 
 /// For each known agent CLI, find running processes and report which of
@@ -69,8 +85,53 @@ pub async fn list_active_agent_sessions(
                     // cannot prove that a provider is awaiting human input.
                     // More specific states are reserved for provider events.
                     state: "working",
+                    title: None,
+                    updated_at: None,
+                    connection: "process",
                 });
                 break;
+            }
+        }
+    }
+
+    // Claude exposes stable session metadata through its own CLI. Enrich the
+    // process snapshot when available, but keep lsof as the provider-neutral
+    // fallback when the command is absent or its JSON contract changes.
+    if let Ok(output) = Command::new("claude")
+        .args(["agents", "--json"])
+        .output()
+        .await
+    {
+        if output.status.success() {
+            for native in parse_claude_sessions(&output.stdout) {
+                let Some(repo_path) = repo_paths
+                    .iter()
+                    .find(|repo| path_contains(repo, &native.cwd))
+                else {
+                    continue;
+                };
+                if let Some(existing) = sessions
+                    .iter_mut()
+                    .find(|session| session.provider == "claude" && session.pid == native.pid)
+                {
+                    existing.id = native.session_id;
+                    existing.cwd = native.cwd;
+                    existing.title = (!native.name.is_empty()).then_some(native.name);
+                    existing.updated_at = Some(native.started_at);
+                    existing.connection = "claude";
+                } else {
+                    sessions.push(AgentSession {
+                        id: native.session_id,
+                        provider: "claude".into(),
+                        repo_path: repo_path.clone(),
+                        cwd: native.cwd,
+                        pid: native.pid,
+                        state: "working",
+                        title: (!native.name.is_empty()).then_some(native.name),
+                        updated_at: Some(native.started_at),
+                        connection: "claude",
+                    });
+                }
             }
         }
     }
@@ -82,6 +143,10 @@ pub async fn list_active_agent_sessions(
             .then_with(|| a.pid.cmp(&b.pid))
     });
     Ok(sessions)
+}
+
+fn parse_claude_sessions(stdout: &[u8]) -> Vec<ClaudeSession> {
+    serde_json::from_slice(stdout).unwrap_or_default()
 }
 
 /// Parse lsof field output. A process record starts with `p`, `c` carries its
@@ -178,5 +243,22 @@ mod tests {
                 (11, "codex", "/Users/a/repos/foo"),
             ]
         );
+    }
+
+    #[test]
+    fn parses_claude_session_metadata() {
+        let json = br#"[{"cwd":"/repos/breach","kind":"interactive","name":"Agent dashboard","pid":42,"sessionId":"session-1","startedAt":1234}]"#;
+        assert_eq!(
+            parse_claude_sessions(json),
+            vec![ClaudeSession {
+                cwd: "/repos/breach".into(),
+                kind: "interactive".into(),
+                name: "Agent dashboard".into(),
+                pid: 42,
+                session_id: "session-1".into(),
+                started_at: 1234,
+            }]
+        );
+        assert!(parse_claude_sessions(b"not json").is_empty());
     }
 }
