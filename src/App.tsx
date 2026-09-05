@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { Route, Routes } from "react-router-dom";
 import { Dashboard } from "./pages/Dashboard";
 import { TopBar } from "./components/TopBar";
+import { Sidebar } from "./components/Sidebar";
 import { SearchProvider } from "./lib/search";
 import { OnboardingProvider, useOnboarding } from "./lib/onboarding";
 import { ToastProvider } from "./lib/toast";
@@ -20,6 +21,9 @@ const RepoDetail = lazy(() =>
 );
 const Settings = lazy(() =>
   import("./pages/Settings").then((module) => ({ default: module.Settings })),
+);
+const Terminal = lazy(() =>
+  import("./pages/Terminal").then((module) => ({ default: module.Terminal })),
 );
 const Onboarding = lazy(() =>
   import("./components/Onboarding").then((module) => ({
@@ -76,16 +80,20 @@ function AppShell() {
     <>
       <div className="h-full flex flex-col">
         <TopBar />
-        <div className="flex-1 overflow-hidden">
-          <Suspense
-            fallback={<div className="p-6 text-sm text-neutral-500">Loading…</div>}
-          >
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/repo/:path" element={<RepoDetail />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-          </Suspense>
+        <div className="flex-1 flex overflow-hidden">
+          <Sidebar />
+          <div className="flex-1 overflow-hidden">
+            <Suspense
+              fallback={<div className="p-6 text-sm text-neutral-500">Loading…</div>}
+            >
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/repo/:path" element={<RepoDetail />} />
+                <Route path="/terminal" element={<Terminal />} />
+                <Route path="/settings" element={<Settings />} />
+              </Routes>
+            </Suspense>
+          </div>
         </div>
       </div>
       {visible && (
