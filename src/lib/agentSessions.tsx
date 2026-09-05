@@ -10,10 +10,11 @@ import {
 import { api } from "./api";
 import { errorText } from "./errors";
 import { getReposPath, getScanNestedRepos } from "./settings";
-import type { AgentSession } from "../types";
+import type { AgentSession, RepoSummary } from "../types";
 
 interface AgentSessionsValue {
   sessions: AgentSession[];
+  repos: RepoSummary[];
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -23,6 +24,7 @@ const Context = createContext<AgentSessionsValue | null>(null);
 
 export function AgentSessionsProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<AgentSession[]>([]);
+  const [repos, setRepos] = useState<RepoSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,6 +35,7 @@ export function AgentSessionsProvider({ children }: { children: ReactNode }) {
         getScanNestedRepos(),
       ]);
       const repos = await api.listRepos(root, scanNested);
+      setRepos(repos);
       setSessions(
         await api.listActiveAgentSessions(repos.map(({ path }) => path)),
       );
@@ -53,8 +56,8 @@ export function AgentSessionsProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const value = useMemo(
-    () => ({ sessions, loading, error, refresh }),
-    [sessions, loading, error, refresh],
+    () => ({ sessions, repos, loading, error, refresh }),
+    [sessions, repos, loading, error, refresh],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

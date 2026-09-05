@@ -1,11 +1,13 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { AgentCard } from "../components/AgentCard";
 import { EmptyState } from "../components/EmptyState";
+import { NewAgentModal } from "../components/NewAgentModal";
 import { agentNeedsAttention, sortAgentSessions } from "../lib/agents";
 import { useAgentSessions } from "../lib/agentSessions";
 
 export function Agents() {
-  const { sessions, loading, error, refresh } = useAgentSessions();
+  const { sessions, repos, loading, error, refresh } = useAgentSessions();
+  const [showNewAgent, setShowNewAgent] = useState(false);
 
   const groups = useMemo(() => {
     const sorted = sortAgentSessions(sessions);
@@ -39,13 +41,23 @@ export function Agents() {
               you.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={refresh}
-            className="rounded-md border border-neutral-800 px-3 py-1.5 text-xs text-neutral-400 hover:border-neutral-600 hover:text-neutral-100"
-          >
-            Refresh
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={refresh}
+              className="rounded-md border border-neutral-800 px-3 py-1.5 text-xs text-neutral-400 hover:border-neutral-600 hover:text-neutral-100"
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowNewAgent(true)}
+              disabled={repos.length === 0}
+              className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-950 hover:bg-white disabled:opacity-50"
+            >
+              New agent
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -83,6 +95,9 @@ export function Agents() {
           ))}
         </div>
       </div>
+      {showNewAgent && (
+        <NewAgentModal repos={repos} onClose={() => setShowNewAgent(false)} />
+      )}
     </main>
   );
 }
