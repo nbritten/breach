@@ -5,7 +5,7 @@ import { agentNeedsAttention, sortAgentSessions } from "../lib/agents";
 import { api } from "../lib/api";
 import { errorText } from "../lib/errors";
 import { useActiveAgentSessionsPoll } from "../lib/hooks";
-import { getReposPath } from "../lib/settings";
+import { getReposPath, getScanNestedRepos } from "../lib/settings";
 import type { AgentSession, RepoSummary } from "../types";
 
 export function Agents() {
@@ -16,8 +16,11 @@ export function Agents() {
 
   const refresh = useCallback(async () => {
     try {
-      const path = await getReposPath();
-      const nextRepos = await api.listRepos(path);
+      const [path, scanNested] = await Promise.all([
+        getReposPath(),
+        getScanNestedRepos(),
+      ]);
+      const nextRepos = await api.listRepos(path, scanNested);
       const nextSessions = await api.listActiveAgentSessions(
         nextRepos.map((repo) => repo.path),
       );

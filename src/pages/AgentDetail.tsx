@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AGENT_INFO, AGENT_STATE_INFO } from "../lib/agents";
 import { api } from "../lib/api";
-import { getReposPath } from "../lib/settings";
+import { getReposPath, getScanNestedRepos } from "../lib/settings";
 import { useTerminalSession } from "../lib/terminalSession";
 import type { AgentSession } from "../types";
 
@@ -16,8 +16,11 @@ export function AgentDetail() {
   );
 
   const refresh = useCallback(async () => {
-    const reposPath = await getReposPath();
-    const repos = await api.listRepos(reposPath);
+    const [reposPath, scanNested] = await Promise.all([
+      getReposPath(),
+      getScanNestedRepos(),
+    ]);
+    const repos = await api.listRepos(reposPath, scanNested);
     const sessions = await api.listActiveAgentSessions(
       repos.map((repo) => repo.path),
     );
