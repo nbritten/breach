@@ -31,6 +31,10 @@ pub struct AgentSession {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub attention_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<u64>,
     pub connection: &'static str,
 }
@@ -57,10 +61,12 @@ struct CodexThread {
     updated_at: u64,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 struct CodexThreadStatus {
     #[serde(rename = "type")]
     kind: String,
+    #[serde(default, rename = "activeFlags")]
+    active_flags: Vec<String>,
 }
 
 /// For each known agent CLI, find running processes and report which of
@@ -105,6 +111,8 @@ pub async fn list_active_agent_sessions(
                     // More specific states are reserved for provider events.
                     state: "working",
                     title: None,
+                    attention_reason: None,
+                    last_message: None,
                     updated_at: None,
                     connection: "process",
                 });
@@ -147,6 +155,8 @@ pub async fn list_active_agent_sessions(
                         pid: native.pid,
                         state: "working",
                         title: (!native.name.is_empty()).then_some(native.name),
+                        attention_reason: None,
+                        last_message: None,
                         updated_at: Some(native.started_at),
                         connection: "claude",
                     });
@@ -225,19 +235,44 @@ fn list_codex_threads(repo_paths: &[String]) -> Vec<AgentSession> {
     threads
         .into_iter()
         .filter_map(|thread| {
-            let state = match thread.status.kind.as_str() {
-                "active" => "working",
-                "idle" => "idle",
-                "systemError" => "failed",
+            let (state, attention_reason) = match thread.status.kind.as_str() {
+                "active"
+                    if thread
+                        .status
+                        .active_flags
+                        .iter()
+                        .any(|flag| flag == "waitingOnApproval") =>
+                {
+                    (
+                        "needs_approval",
+                        Some("Codex is waiting for approval.".into()),
+                    )
+                }
+                "active"
+                    if thread
+                        .status
+                        .active_flags
+                        .iter()
+                        .any(|flag| flag == "waitingOnUserInput") =>
+                {
+                    (
+                        "needs_input",
+                        Some("Codex is waiting for your answer.".into()),
+                    )
+                }
+                "active" => ("working", None),
+                "idle" => ("idle", None),
+                "systemError" => ("failed", Some("Codex reported a system error.".into())),
                 _ => return None,
             };
             let repo_path = repo_paths
                 .iter()
                 .find(|repo| path_contains(repo, &thread.cwd))?;
+            let preview = (!thread.preview.is_empty()).then_some(thread.preview);
             let title = thread
                 .name
                 .filter(|name| !name.is_empty())
-                .or_else(|| (!thread.preview.is_empty()).then_some(thread.preview));
+                .or_else(|| preview.clone());
             Some(AgentSession {
                 id: thread.id,
                 provider: "codex".into(),
@@ -246,6 +281,8 @@ fn list_codex_threads(repo_paths: &[String]) -> Vec<AgentSession> {
                 pid: 0,
                 state,
                 title,
+                attention_reason,
+                last_message: preview,
                 updated_at: Some(thread.updated_at.saturating_mul(1000)),
                 connection: "codex",
             })
@@ -378,5 +415,14 @@ mod tests {
             }]
         );
         assert!(parse_claude_sessions(b"not json").is_empty());
+    }
+
+    #[test]
+    fn parses_codex_attention_flags() {
+        let status: CodexThreadStatus =
+            serde_json::from_str(r#"{"type":"active","activeFlags":["waitingOnApproval"]}"#)
+                .unwrap();
+        assert_eq!(status.kind, "active");
+        assert_eq!(status.active_flags, vec!["waitingOnApproval"]);
     }
 }
