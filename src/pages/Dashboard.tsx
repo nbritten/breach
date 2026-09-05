@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   buildServiceUrl,
@@ -29,6 +30,7 @@ import {
 } from "../lib/hooks";
 import { agentsByRepo } from "../lib/agents";
 import { jsonEqual } from "../lib/equality";
+import { useTerminalSession } from "../lib/terminalSession";
 
 import { RepoCard } from "../components/RepoCard";
 import { EmptyState } from "../components/EmptyState";
@@ -64,6 +66,9 @@ const CloneMissingModal = lazy(() =>
 );
 
 export function Dashboard() {
+  const navigate = useNavigate();
+  const { sessions: terminalSessions, open: openEmbeddedTerminal } =
+    useTerminalSession();
   const [repos, setRepos] = useState<RepoSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +87,22 @@ export function Dashboard() {
   const [serviceTpl, setServiceTpl] = useState("");
   const [serviceSet, setServiceSet] = useState<Set<string>>(new Set());
   const { showError } = useToast();
+  const terminalPaths = useMemo(
+    () =>
+      new Set(
+        terminalSessions
+          .filter((session) => session.status === "running")
+          .map((session) => session.cwd),
+      ),
+    [terminalSessions],
+  );
+  const openBreachTerminal = useCallback(
+    async (path: string) => {
+      await openEmbeddedTerminal(path);
+      navigate("/terminal");
+    },
+    [navigate, openEmbeddedTerminal],
+  );
 
   const togglePin = useCallback(
     async (name: string) => {
@@ -353,9 +374,11 @@ export function Dashboard() {
               {repos.length} repos · {dirtyCount} changed
             </span>
           )}
-          <Tooltip content="Open your repos directory in your configured terminal app, or the first known terminal we find installed if not set.">
+          <Tooltip content="Open your repos directory in Breach Terminal.">
             <button
-              onClick={() => reposPath && openTerminal(reposPath).catch(showError)}
+              onClick={() =>
+                reposPath && openBreachTerminal(reposPath).catch(showError)
+              }
               disabled={!reposPath}
               className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50 flex items-center gap-1.5"
             >
@@ -373,6 +396,16 @@ export function Dashboard() {
                 <line x1="12" y1="19" x2="20" y2="19" />
               </svg>
               Terminal
+            </button>
+          </Tooltip>
+          <Tooltip content="Open your repos directory in your configured external terminal app.">
+            <button
+              onClick={() => reposPath && openTerminal(reposPath).catch(showError)}
+              disabled={!reposPath}
+              aria-label="Open in external terminal"
+              className="p-1.5 rounded text-neutral-500 hover:text-neutral-100 hover:bg-neutral-800 disabled:opacity-50"
+            >
+              ↗
             </button>
           </Tooltip>
           <Tooltip content="Lists every non-archived repo in your configured GitHub accounts (orgs or users) that isn't local yet, then lets you pick which ones to clone.">
@@ -534,6 +567,8 @@ export function Dashboard() {
                               ? buildServiceUrl(serviceTpl, r.name)
                               : null
                           }
+                          terminalActive={terminalPaths.has(r.path)}
+                          onOpenTerminal={openBreachTerminal}
                         />
                       ))}
                     </div>

@@ -25,6 +25,7 @@ type TerminalSessionContextValue = {
   activeId: string | null;
   activate: (id: string) => void;
   create: (cwd?: string, cols?: number, rows?: number) => Promise<TerminalWorkspaceSession>;
+  open: (cwd: string) => Promise<TerminalWorkspaceSession>;
   ensure: (cols?: number, rows?: number) => Promise<TerminalWorkspaceSession>;
   close: (id: string) => Promise<void>;
   rename: (id: string, title: string) => void;
@@ -150,6 +151,17 @@ export function TerminalSessionProvider({ children }: { children: ReactNode }) {
     return ensurePromiseRef.current;
   }, [activate, create]);
 
+  const open = useCallback((cwd: string) => {
+    const existing = sessionsRef.current.find(
+      (session) => session.cwd === cwd && session.status === "running",
+    );
+    if (existing) {
+      activate(existing.id);
+      return Promise.resolve(existing);
+    }
+    return create(cwd);
+  }, [activate, create]);
+
   const close = useCallback(async (id: string) => {
     const index = sessionsRef.current.findIndex((session) => session.id === id);
     if (index === -1) return;
@@ -191,10 +203,10 @@ export function TerminalSessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<TerminalSessionContextValue>(() => ({
-    sessions, activeId, activate, create, ensure, close, rename, subscribe,
+    sessions, activeId, activate, create, open, ensure, close, rename, subscribe,
     write: writeTerminal,
     resize: resizeTerminal,
-  }), [sessions, activeId, activate, create, ensure, close, rename, subscribe]);
+  }), [sessions, activeId, activate, create, open, ensure, close, rename, subscribe]);
 
   return <TerminalSessionContext.Provider value={value}>{children}</TerminalSessionContext.Provider>;
 }
