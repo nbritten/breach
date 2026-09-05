@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   branchForRepo,
@@ -9,6 +9,7 @@ import {
 } from "../lib/settings";
 import { useToast } from "../lib/toast";
 import { errorText } from "../lib/errors";
+import { useTerminalSession } from "../lib/terminalSession";
 import { DiffView } from "../components/DiffView";
 import { CleanModal } from "../components/CleanModal";
 import type { CommitInfo } from "../types";
@@ -18,6 +19,8 @@ type View =
   | { kind: "commit"; sha: string; subject: string };
 
 export function RepoDetail() {
+  const navigate = useNavigate();
+  const { open: openEmbeddedTerminal } = useTerminalSession();
   const { path: slug } = useParams<{ path: string }>();
   const repoPath = useMemo(() => (slug ? decodeURIComponent(slug) : ""), [slug]);
   const repoName = useMemo(() => repoPath.split("/").filter(Boolean).pop() ?? "", [repoPath]);
@@ -33,6 +36,11 @@ export function RepoDetail() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const { showError } = useToast();
+
+  const openBreachTerminal = async () => {
+    await openEmbeddedTerminal(repoPath);
+    navigate("/terminal");
+  };
 
   const loadDiff = useCallback(async (v: View) => {
     if (!repoPath) return;
@@ -97,8 +105,8 @@ export function RepoDetail() {
           <p className="text-xs text-neutral-500 font-mono truncate">{repoPath}</p>
         </div>
         <button
-          onClick={() => openTerminal(repoPath).catch(showError)}
-          title="Open in terminal"
+          onClick={() => openBreachTerminal().catch(showError)}
+          title="Open in Breach Terminal"
           className="shrink-0 px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm flex items-center gap-1.5"
         >
           <svg
@@ -115,6 +123,14 @@ export function RepoDetail() {
             <line x1="12" y1="19" x2="20" y2="19" />
           </svg>
           Terminal
+        </button>
+        <button
+          onClick={() => openTerminal(repoPath).catch(showError)}
+          title="Open in external terminal"
+          aria-label="Open in external terminal"
+          className="shrink-0 px-2.5 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm"
+        >
+          ↗
         </button>
         <button
           onClick={() => setShowClean(true)}
