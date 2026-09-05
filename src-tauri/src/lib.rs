@@ -79,7 +79,16 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(commands::terminal::TerminalState::default())
         .manage(commands::watcher::WatcherState::default())
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                use tauri::Manager;
+                window
+                    .state::<commands::terminal::TerminalState>()
+                    .kill_all();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::agents::list_active_agent_sessions,
             commands::repos::list_repos,
@@ -102,6 +111,11 @@ pub fn run() {
             commands::notifications::pr_notifications_changed,
             commands::shell::open_in_terminal,
             commands::shell::list_terminal_apps,
+            commands::terminal::terminal_spawn,
+            commands::terminal::terminal_write,
+            commands::terminal::terminal_resize,
+            commands::terminal::terminal_kill,
+            commands::terminal::terminal_list,
             commands::watcher::start_repos_watcher,
         ])
         .run(tauri::generate_context!())
