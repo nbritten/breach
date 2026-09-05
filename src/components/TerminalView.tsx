@@ -2,19 +2,14 @@ import { useEffect, useRef } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { useTerminalSession } from "../lib/terminalSession";
+import { errorText } from "../lib/errors";
 
-const FIXTURE = [
-  "\x1b[1;35mbreach\x1b[0m \x1b[2m~/repos/breach\x1b[0m",
-  "",
-  "\x1b[32m❯\x1b[0m git status --short",
-  " M src/App.tsx",
-  "?? src/pages/Terminal.tsx",
-  "",
-  "\x1b[32m❯\x1b[0m ",
-];
+const encoder = new TextEncoder();
 
 export function TerminalView() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { start, subscribe, write, resize } = useTerminalSession();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -58,26 +53,66 @@ export function TerminalView() {
     terminal.loadAddon(fitAddon);
     terminal.open(container);
 
-    let frame = window.requestAnimationFrame(() => {
+    let cancelled = false;
+    let unsubscribeOutput: (() => void) | null = null;
+    let activeSessionId: string | null = null;
+    const disposables = [
+      terminal.onData((data) => {
+        if (activeSessionId) {
+          write(activeSessionId, encoder.encode(data)).catch(() => {});
+        }
+      }),
+      terminal.onBinary((data) => {
+        if (!activeSessionId) return;
+        const bytes = Uint8Array.from(data, (char) => char.charCodeAt(0));
+        write(activeSessionId, bytes).catch(() => {});
+      }),
+    ];
+
+    const fit = () => {
       fitAddon.fit();
-      for (const line of FIXTURE.slice(0, -1)) terminal.writeln(line);
-      terminal.write(FIXTURE[FIXTURE.length - 1] ?? "");
+      if (activeSessionId) {
+        resize(activeSessionId, terminal.cols, terminal.rows).catch(() => {});
+      }
+    };
+
+    let frame = window.requestAnimationFrame(() => {
+      fit();
       terminal.focus();
+      start(terminal.cols, terminal.rows)
+        .then((session) => {
+          if (cancelled) return;
+          activeSessionId = session.id;
+          unsubscribeOutput = subscribe(session.id, (data) =>
+            terminal.write(data),
+          );
+          return resize(session.id, terminal.cols, terminal.rows);
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            terminal.writeln(
+              `\r\n\x1b[31mCould not start terminal: ${errorText(error)}\x1b[0m`,
+            );
+          }
+        });
     });
 
     const resizeObserver = new ResizeObserver(() => {
       window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(() => fitAddon.fit());
+      frame = window.requestAnimationFrame(fit);
     });
     resizeObserver.observe(container);
 
     // Web fonts resolving can change cell geometry without resizing the
     // container, so fit once more when the active font set settles.
     document.fonts?.ready.then(() => {
-      if (container.isConnected) fitAddon.fit();
+      if (container.isConnected) fit();
     });
 
     return () => {
+      cancelled = true;
+      unsubscribeOutput?.();
+      disposables.forEach((disposable) => disposable.dispose());
       resizeObserver.disconnect();
       window.cancelAnimationFrame(frame);
       terminal.dispose();
@@ -87,7 +122,7 @@ export function TerminalView() {
   return (
     <div
       ref={containerRef}
-      aria-label="Terminal preview"
+      aria-label="Terminal"
       className="h-full w-full bg-neutral-950 px-4 py-3"
     />
   );
