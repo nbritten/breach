@@ -7,7 +7,7 @@ export function AgentDetail() {
   const { id = "" } = useParams();
   const sessionId = decodeURIComponent(id);
   const navigate = useNavigate();
-  const { open: openTerminal } = useTerminalSession();
+  const terminal = useTerminalSession();
   const { sessions, loading } = useAgentSessions();
   const session =
     sessions.find((candidate) => candidate.id === sessionId) ?? null;
@@ -38,7 +38,20 @@ export function AgentDetail() {
   const repoSlug = encodeURIComponent(session.repo_path);
 
   const showTerminal = async () => {
-    await openTerminal(session.cwd);
+    await terminal.open(session.cwd);
+    navigate("/terminal");
+  };
+
+  const resumeAgent = async () => {
+    const terminalSession = await terminal.create(session.cwd);
+    terminal.rename(terminalSession.id, `${provider.label} · resume`);
+    const quotedId = `'${session.id.replace(/'/g, `'\\''`)}'`;
+    const command =
+      session.provider === "codex"
+        ? `codex resume ${quotedId}\r`
+        : `claude --resume ${quotedId}\r`;
+    await new Promise((resolve) => window.setTimeout(resolve, 120));
+    await terminal.write(terminalSession.id, new TextEncoder().encode(command));
     navigate("/terminal");
   };
 
@@ -86,6 +99,18 @@ export function AgentDetail() {
           )}
 
           <div className="mt-6 flex flex-wrap gap-2">
+            {session.connection !== "process" && (
+              <button
+                type="button"
+                onClick={resumeAgent}
+                className="rounded-md bg-amber-300 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-amber-200"
+              >
+                {session.state === "needs_approval" ||
+                session.state === "needs_input"
+                  ? "Respond to agent"
+                  : "Resume agent"}
+              </button>
+            )}
             <Link
               to={`/repo/${repoSlug}`}
               className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 hover:bg-white"
