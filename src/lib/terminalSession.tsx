@@ -3,7 +3,11 @@ import {
   type ReactNode,
 } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { getReposPath } from "./settings";
+import {
+  getReposPath,
+  getTerminalWorkspace,
+  setTerminalWorkspace,
+} from "./settings";
 import {
   killTerminal, resizeTerminal, spawnTerminal, writeTerminal,
   type TerminalExitEvent, type TerminalOutputEvent, type TerminalSessionInfo,
@@ -56,12 +60,27 @@ export function TerminalSessionProvider({ children }: { children: ReactNode }) {
   const sessionsRef = useRef<TerminalWorkspaceSession[]>([]);
   const activeIdRef = useRef<string | null>(null);
   const ensurePromiseRef = useRef<Promise<TerminalWorkspaceSession> | null>(null);
+  const hydrationRef = useRef<Promise<void> | null>(null);
   const buffersRef = useRef(new Map<string, BufferedOutput>());
   const closedIdsRef = useRef(new Set<string>());
   const outputListenersRef = useRef(new Map<string, Set<OutputListener>>());
   const eventListenersRef = useRef<UnlistenFn[]>([]);
   const eventListenersReadyRef = useRef<Promise<void> | null>(null);
   const disposedRef = useRef(false);
+
+  const persist = useCallback(
+    (current: TerminalWorkspaceSession[], selectedId: string | null) => {
+      const activeIndex = Math.max(
+        0,
+        current.findIndex((session) => session.id === selectedId),
+      );
+      setTerminalWorkspace({
+        sessions: current.map(({ cwd, title }) => ({ cwd, title })),
+        activeIndex,
+      }).catch((error) => console.warn("could not save terminal workspace", error));
+    },
+    [],
+  );
 
   const replaceSessions = useCallback((update: (current: TerminalWorkspaceSession[]) => TerminalWorkspaceSession[]) => {
     const next = update(sessionsRef.current);
@@ -74,7 +93,8 @@ export function TerminalSessionProvider({ children }: { children: ReactNode }) {
     if (!sessionsRef.current.some((session) => session.id === id)) return;
     activeIdRef.current = id;
     setActiveId(id);
-  }, []);
+    persist(sessionsRef.current, id);
+  }, [persist]);
 
   const publish = useCallback((id: string, data: Uint8Array) => {
     if (closedIdsRef.current.has(id)) return;
@@ -121,46 +141,97 @@ export function TerminalSessionProvider({ children }: { children: ReactNode }) {
     };
   }, [ensureEventListeners]);
 
+  const hydrate = useCallback(() => {
+    if (hydrationRef.current) return hydrationRef.current;
+    const pending = ensureEventListeners().then(async () => {
+        let saved;
+        try {
+          saved = await getTerminalWorkspace();
+        } catch (error) {
+          console.warn("could not load terminal workspace", error);
+          saved = { sessions: [], activeIndex: 0 };
+        }
+        const restored = await Promise.all(
+          saved.sessions.map(async ({ cwd, title }): Promise<TerminalWorkspaceSession | null> => {
+            try {
+              const started = await spawnTerminal(cwd, 80, 24);
+              return { ...started, title, status: "running" };
+            } catch (error) {
+              console.warn(`could not restore terminal at ${cwd}`, error);
+              return null;
+            }
+          }),
+        );
+        const available = restored.filter(
+          (session): session is TerminalWorkspaceSession => session !== null,
+        );
+        sessionsRef.current = available;
+        setSessions(available);
+        const selected =
+          available[Math.min(saved.activeIndex, available.length - 1)]?.id ??
+          null;
+        activeIdRef.current = selected;
+        setActiveId(selected);
+        if (available.length !== saved.sessions.length) {
+          persist(available, selected);
+        }
+      });
+    hydrationRef.current = pending;
+    return pending;
+  }, [ensureEventListeners, persist]);
+
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
+
   const create = useCallback(async (cwd?: string, cols = 80, rows = 24) => {
-    await ensureEventListeners();
+    await hydrate();
     const started = await spawnTerminal(cwd ?? await getReposPath(), cols, rows);
     const session: TerminalWorkspaceSession = {
       ...started,
       title: defaultTitle(started.cwd),
       status: "running",
     };
-    replaceSessions((current) => [...current, session]);
+    const next = replaceSessions((current) => [...current, session]);
     activeIdRef.current = session.id;
     setActiveId(session.id);
+    persist(next, session.id);
     return session;
-  }, [ensureEventListeners, replaceSessions]);
+  }, [hydrate, persist, replaceSessions]);
 
   const ensure = useCallback((cols = 80, rows = 24) => {
-    const active = sessionsRef.current.find((session) => session.id === activeIdRef.current);
-    if (active) return Promise.resolve(active);
-    const first = sessionsRef.current[0];
-    if (first) {
-      activate(first.id);
-      return Promise.resolve(first);
-    }
     if (!ensurePromiseRef.current) {
-      ensurePromiseRef.current = create(undefined, cols, rows).finally(() => {
-        ensurePromiseRef.current = null;
-      });
+      ensurePromiseRef.current = hydrate()
+        .then(() => {
+          const active = sessionsRef.current.find(
+            (session) => session.id === activeIdRef.current,
+          );
+          if (active) return active;
+          const first = sessionsRef.current[0];
+          if (first) {
+            activate(first.id);
+            return first;
+          }
+          return create(undefined, cols, rows);
+        })
+        .finally(() => {
+          ensurePromiseRef.current = null;
+        });
     }
     return ensurePromiseRef.current;
-  }, [activate, create]);
+  }, [activate, create, hydrate]);
 
-  const open = useCallback((cwd: string) => {
+  const open = useCallback(async (cwd: string) => {
+    await hydrate();
     const existing = sessionsRef.current.find(
       (session) => session.cwd === cwd && session.status === "running",
     );
     if (existing) {
       activate(existing.id);
-      return Promise.resolve(existing);
+      return existing;
     }
     return create(cwd);
-  }, [activate, create]);
+  }, [activate, create, hydrate]);
 
   const close = useCallback(async (id: string) => {
     const index = sessionsRef.current.findIndex((session) => session.id === id);
@@ -178,15 +249,17 @@ export function TerminalSessionProvider({ children }: { children: ReactNode }) {
       activeIdRef.current = next;
       setActiveId(next);
     }
-  }, []);
+    persist(remaining, activeIdRef.current);
+  }, [persist]);
 
   const rename = useCallback((id: string, title: string) => {
     const trimmed = title.trim();
     if (!trimmed) return;
-    replaceSessions((current) => current.map((session) =>
+    const next = replaceSessions((current) => current.map((session) =>
       session.id === id ? { ...session, title: trimmed } : session,
     ));
-  }, [replaceSessions]);
+    persist(next, activeIdRef.current);
+  }, [persist, replaceSessions]);
 
   const subscribe = useCallback((id: string, listener: OutputListener) => {
     for (const chunk of buffersRef.current.get(id)?.chunks ?? []) listener(chunk);
