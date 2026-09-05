@@ -11,6 +11,8 @@ import {
   getPinnedRepos,
   getRepoOrgs,
   getReposPath,
+  getScanNestedRepos,
+  getGroupNestedRepos,
   getServiceRepos,
   getServiceUrlTemplate,
   getTerminalApp,
@@ -21,6 +23,8 @@ import {
   setPinnedRepos,
   setRepoOrgs,
   setReposPath,
+  setScanNestedRepos,
+  setGroupNestedRepos,
   setServiceRepos,
   setServiceUrlTemplate,
   setTerminalApp,
@@ -69,6 +73,8 @@ export function Settings() {
   const [terminalApp, setTerminalAppState] = useState("");
   const [terminalSuggestions, setTerminalSuggestions] = useState<string[]>([]);
   const [checkUpdates, setCheckUpdates] = useState(true);
+  const [scanNested, setScanNested] = useState(false);
+  const [groupNested, setGroupNested] = useState(true);
   const [demoMode, setDemoModeState] = useState(false);
   const [saved, setSaved] = useState(false);
   const [imported, setImported] = useState(false);
@@ -80,7 +86,7 @@ export function Settings() {
   useEffect(() => {
     (async () => {
       try {
-        const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk, demo] =
+        const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk, nested, group, demo] =
           await Promise.all([
             getReposPath(),
             getDefaultBranch(),
@@ -91,6 +97,8 @@ export function Settings() {
             getServiceRepos(),
             getTerminalApp(),
             getCheckForUpdates(),
+            getScanNestedRepos(),
+            getGroupNestedRepos(),
             getDemoMode(),
           ]);
         setPath(p);
@@ -103,6 +111,8 @@ export function Settings() {
         setServices(serviceList.map((n) => newServiceRow(n)));
         setTerminalAppState(term);
         setCheckUpdates(chk);
+        setScanNested(nested);
+        setGroupNested(group);
         setDemoModeState(demo);
       } catch (e) {
         showError(e);
@@ -139,6 +149,8 @@ export function Settings() {
         setServiceRepos(serviceList),
         setTerminalApp(terminalApp.trim()),
         setCheckForUpdates(checkUpdates),
+        setScanNestedRepos(scanNested),
+        setGroupNestedRepos(groupNested),
         setDemoMode(demoMode),
       ]);
       // Flip the runtime API dispatcher to match. Demo mode toggling off
@@ -221,7 +233,7 @@ export function Settings() {
       const payload = parseImport(text);
       await applyImport(payload);
       // Reload visible state from store so the form reflects what was just imported.
-      const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk] =
+      const [p, f, overrides, orgList, pinList, tpl, serviceList, term, chk, nested, group] =
         await Promise.all([
           getReposPath(),
           getDefaultBranch(),
@@ -232,6 +244,8 @@ export function Settings() {
           getServiceRepos(),
           getTerminalApp(),
           getCheckForUpdates(),
+          getScanNestedRepos(),
+          getGroupNestedRepos(),
         ]);
       setPath(p);
       setFallback(f);
@@ -243,6 +257,8 @@ export function Settings() {
       setServices(serviceList.map((n) => newServiceRow(n)));
       setTerminalAppState(term);
       setCheckUpdates(chk);
+      setScanNested(nested);
+      setGroupNested(group);
       setImported(true);
       setTimeout(() => setImported(false), 1500);
     } catch (e) {
@@ -281,6 +297,46 @@ export function Settings() {
             className={`w-full py-2 ${INPUT_CLS}`}
             placeholder="~/repos"
           />
+          <label className="flex items-start gap-2 cursor-pointer select-none mt-3">
+            <input
+              type="checkbox"
+              checked={scanNested}
+              onChange={(e) => setScanNested(e.currentTarget.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-medium">
+                Scan nested repositories
+              </span>
+              <span className="block text-xs text-neutral-500 mt-0.5">
+                Recursively find Git repositories and worktrees inside this
+                directory, including those nested inside another repo. Off by
+                default — only immediate children are scanned.
+              </span>
+            </span>
+          </label>
+          <label
+            className={`flex items-start gap-2 select-none mt-3 ml-6 ${
+              scanNested ? "cursor-pointer" : "opacity-50 cursor-not-allowed"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={groupNested}
+              disabled={!scanNested}
+              onChange={(e) => setGroupNested(e.currentTarget.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-medium">
+                Group nested repositories
+              </span>
+              <span className="block text-xs text-neutral-500 mt-0.5">
+                Sort nested checkouts next to their parent folder. Turn off to
+                sort by repository name. Available when nested scanning is on.
+              </span>
+            </span>
+          </label>
         </section>
 
         <section className="mb-8">
@@ -357,7 +413,7 @@ export function Settings() {
 
         <SettingsSection
           label="Branch overrides"
-          description="Per-repo branch used instead of the default when syncing. Repo name matches the directory name under your repos path."
+          description="Per-repo branch used instead of the default when syncing. Use the directory name when it is unique, or the full checkout path when two repos share a name."
           onAdd={addRow}
           itemCount={rows.length}
           emptyLabel={
@@ -381,7 +437,7 @@ export function Settings() {
               <input
                 value={r.name}
                 onChange={(e) => updateRow(r.id, { name: e.currentTarget.value })}
-                placeholder="my-repo"
+                placeholder="my-repo or /full/path"
                 className={INPUT_CLS}
               />
               <input
@@ -397,7 +453,7 @@ export function Settings() {
 
         <SettingsSection
           label="Pinned repos"
-          description="Local repo names to pin at the top of the dashboard, above team sections."
+          description="Repos to pin at the top of the dashboard. Use the directory name when it is unique, or the full checkout path when two repos share a name. Paths round-trip through Export as ~/…."
           onAdd={addPinRow}
           itemCount={pins.length}
           emptyLabel="No pinned repos. Click + Add to pin one."
@@ -422,7 +478,7 @@ export function Settings() {
               Repos that expose a docs page. Each listed repo gets a "Docs" button on its
               card that opens the URL with{" "}
               <code className="text-neutral-300">{"{name}"}</code> replaced by the repo's
-              directory name.
+              directory name. Use a full path when two checkouts share that name.
             </>
           }
           onAdd={addServiceRow}

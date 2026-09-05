@@ -3,15 +3,25 @@ import {
   filterByChips,
   filterRepos,
   groupRepos,
+  isRepoPinned,
+  repoPinKey,
+  repoPathLabel,
+  sortRepos,
+  togglePinnedOrder,
   repoFilterCounts,
+  prsForRepo,
   type RepoFilter,
 } from "./dashboard";
 import type { CiStatus, MyPrs, RepoSummary } from "../types";
 
-function repo(name: string, branch: string | null = "main"): RepoSummary {
+function repo(
+  name: string,
+  branch: string | null = "main",
+  path?: string,
+): RepoSummary {
   return {
     name,
-    path: `/repos/${name}`,
+    path: path ?? `/repos/${name}`,
     branch,
     dirty: false,
     ahead: 0,
@@ -19,6 +29,7 @@ function repo(name: string, branch: string | null = "main"): RepoSummary {
     has_upstream: true,
     last_commit: null,
     error: null,
+    origin_slug: null,
   };
 }
 
@@ -47,6 +58,38 @@ describe("filterRepos", () => {
 
   it("returns empty when nothing matches", () => {
     expect(filterRepos(repos, "zzz")).toEqual([]);
+  });
+
+  it("matches by path so nested parents are searchable", () => {
+    const nested = [
+      repo("frontend", "main", "/dev/acme/frontend"),
+      repo("frontend", "main", "/dev/beta/frontend"),
+    ];
+    expect(filterRepos(nested, "acme").map((r) => r.path)).toEqual([
+      "/dev/acme/frontend",
+    ]);
+  });
+});
+
+describe("repoPathLabel", () => {
+  const acme = repo("frontend", "main", "/dev/acme/frontend");
+  const beta = repo("frontend", "main", "/dev/beta/frontend");
+  const unique = repo("api", "main", "/dev/api");
+
+  it("is null when the basename is unique", () => {
+    expect(repoPathLabel(unique, [acme, unique])).toBeNull();
+  });
+
+  it("shows parent/name when two checkouts share a basename", () => {
+    expect(repoPathLabel(acme, [acme, beta])).toBe("acme/frontend");
+    expect(repoPathLabel(beta, [acme, beta])).toBe("beta/frontend");
+  });
+
+  it("lengthens the suffix when parent/name still clashes", () => {
+    const a = repo("frontend", "main", "/work/org/app/frontend");
+    const b = repo("frontend", "main", "/work/other/app/frontend");
+    expect(repoPathLabel(a, [a, b])).toBe("org/app/frontend");
+    expect(repoPathLabel(b, [a, b])).toBe("other/app/frontend");
   });
 });
 
@@ -83,6 +126,162 @@ describe("groupRepos", () => {
     const sections = groupRepos(repos, ["a", "b", "c", "d"]);
     expect(sections.map((s) => s.key)).toEqual(["__pinned__"]);
     expect(sections[0].repos.map((r) => r.name)).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("pins only the matching checkout when two repos share a basename", () => {
+    const acme = repo("frontend", "main", "/dev/acme/frontend");
+    const beta = repo("frontend", "main", "/dev/beta/frontend");
+    const sections = groupRepos([acme, beta], ["/dev/acme/frontend"]);
+    expect(sections[0].repos.map((r) => r.path)).toEqual(["/dev/acme/frontend"]);
+    expect(sections[1].repos.map((r) => r.path)).toEqual(["/dev/beta/frontend"]);
+  });
+
+  it("still matches a legacy name pin when the basename is unique", () => {
+    const sections = groupRepos(repos, ["b"]);
+    expect(sections[0].repos.map((r) => r.name)).toEqual(["b"]);
+  });
+
+  it("does not apply a name pin to both checkouts when names clash", () => {
+    const acme = repo("frontend", "main", "/dev/acme/frontend");
+    const beta = repo("frontend", "main", "/dev/beta/frontend");
+    const sections = groupRepos([acme, beta], ["frontend"]);
+    expect(sections.map((s) => s.key)).toEqual(["__other__"]);
+    expect(sections[0].repos.map((r) => r.path)).toEqual([
+      "/dev/acme/frontend",
+      "/dev/beta/frontend",
+    ]);
+  });
+});
+
+describe("repoPinKey and isRepoPinned", () => {
+  const acme = repo("frontend", "main", "/dev/acme/frontend");
+  const beta = repo("frontend", "main", "/dev/beta/frontend");
+  const unique = repo("api", "main", "/dev/api");
+
+  it("uses path as the pin key when names clash", () => {
+    expect(repoPinKey(acme, [acme, beta])).toBe("/dev/acme/frontend");
+    expect(repoPinKey(beta, [acme, beta])).toBe("/dev/beta/frontend");
+  });
+
+  it("uses basename when the name is unique", () => {
+    expect(repoPinKey(unique, [acme, unique])).toBe("api");
+  });
+
+  it("treats a path pin as matching only that checkout", () => {
+    expect(isRepoPinned(acme, ["/dev/acme/frontend"], [acme, beta])).toBe(true);
+    expect(isRepoPinned(beta, ["/dev/acme/frontend"], [acme, beta])).toBe(false);
+  });
+
+  it("ignores a name pin when two checkouts share that basename", () => {
+    expect(isRepoPinned(acme, ["frontend"], [acme, beta])).toBe(false);
+    expect(isRepoPinned(beta, ["frontend"], [acme, beta])).toBe(false);
+  });
+
+  it("still matches a name pin when the basename is unique", () => {
+    expect(isRepoPinned(unique, ["api"], [acme, unique])).toBe(true);
+  });
+});
+
+describe("togglePinnedOrder", () => {
+  const acme = repo("frontend", "main", "/dev/acme/frontend");
+  const beta = repo("frontend", "main", "/dev/beta/frontend");
+  const unique = repo("api", "main", "/dev/api");
+
+  it("pins by path when names clash", () => {
+    expect(togglePinnedOrder(acme, [acme, beta], [])).toEqual([
+      "/dev/acme/frontend",
+    ]);
+  });
+
+  it("unpins a path pin", () => {
+    expect(
+      togglePinnedOrder(acme, [acme, beta], ["/dev/acme/frontend"]),
+    ).toEqual([]);
+  });
+
+  it("clears a leftover name pin when pinning a clashing checkout", () => {
+    expect(togglePinnedOrder(acme, [acme, beta], ["frontend"])).toEqual([
+      "/dev/acme/frontend",
+    ]);
+  });
+
+  it("unpins by dropping both name and path keys", () => {
+    expect(
+      togglePinnedOrder(acme, [acme, beta], [
+        "frontend",
+        "/dev/acme/frontend",
+      ]),
+    ).toEqual([]);
+  });
+
+  it("pins and unpins by basename when the name is unique", () => {
+    expect(togglePinnedOrder(unique, [acme, unique], [])).toEqual(["api"]);
+    expect(togglePinnedOrder(unique, [acme, unique], ["api"])).toEqual([]);
+  });
+});
+
+describe("sortRepos", () => {
+  const acme = repo("acme", "main", "/dev/acme");
+  const acmeFront = repo("frontend", "main", "/dev/acme/frontend");
+  const betaFront = repo("frontend", "main", "/dev/beta/frontend");
+  const beta = repo("beta", "main", "/dev/beta");
+  const mixed = [betaFront, acmeFront, beta, acme];
+
+  it("groups nested checkouts under their parent by path", () => {
+    expect(sortRepos(mixed, true).map((r) => r.path)).toEqual([
+      "/dev/acme",
+      "/dev/acme/frontend",
+      "/dev/beta",
+      "/dev/beta/frontend",
+    ]);
+  });
+
+  it("sorts by basename when grouping is off, with path as the tie-break", () => {
+    expect(sortRepos(mixed, false).map((r) => r.path)).toEqual([
+      "/dev/acme",
+      "/dev/beta",
+      "/dev/acme/frontend",
+      "/dev/beta/frontend",
+    ]);
+  });
+
+  it("keeps a prefix sibling from sorting between a parent and its child", () => {
+    const tools = repo("acme-tools", "main", "/dev/acme-tools");
+    expect(
+      sortRepos([tools, acmeFront, acme], true).map((r) => r.path),
+    ).toEqual(["/dev/acme", "/dev/acme/frontend", "/dev/acme-tools"]);
+  });
+});
+
+describe("prsForRepo", () => {
+  const acme = {
+    ...repo("frontend", "main", "/dev/acme/frontend"),
+    origin_slug: "acme/frontend",
+  };
+  const beta = {
+    ...repo("frontend", "main", "/dev/beta/frontend"),
+    origin_slug: "beta/frontend",
+  };
+  const bucket = {
+    "acme/frontend": [
+      { number: 1, title: "a", url: "u", is_draft: false, repo: "frontend" },
+    ],
+    "beta/frontend": [
+      { number: 2, title: "b", url: "u", is_draft: false, repo: "frontend" },
+    ],
+  };
+
+  it("attaches PRs by origin slug so same-named checkouts stay distinct", () => {
+    expect(prsForRepo(acme, bucket).map((p) => p.number)).toEqual([1]);
+    expect(prsForRepo(beta, bucket).map((p) => p.number)).toEqual([2]);
+  });
+
+  it("falls back to basename when there is no origin slug", () => {
+    const local = repo("beta");
+    const byName = {
+      beta: [{ number: 9, title: "x", url: "u", is_draft: false, repo: "beta" }],
+    };
+    expect(prsForRepo(local, byName).map((p) => p.number)).toEqual([9]);
   });
 });
 
@@ -137,6 +336,31 @@ describe("filterByChips and repoFilterCounts", () => {
     expect(
       filterByChips(repos, active, prsForBeta, {}).map((r) => r.name),
     ).toEqual(["beta"]);
+  });
+
+  it("matches open-prs via origin slug so same-named checkouts stay distinct", () => {
+    const acme = {
+      ...repo("frontend", "main", "/dev/acme/frontend"),
+      origin_slug: "acme/frontend",
+    };
+    const beta = {
+      ...repo("frontend", "main", "/dev/beta/frontend"),
+      origin_slug: "beta/frontend",
+    };
+    const prs: MyPrs = {
+      authored: {
+        "acme/frontend": [
+          { number: 1, title: "x", url: "u", is_draft: false, repo: "frontend" },
+        ],
+      },
+      review_requested: {},
+      errors: {},
+    };
+    expect(
+      filterByChips([acme, beta], new Set<RepoFilter>(["open-prs"]), prs, {}).map(
+        (r) => r.path,
+      ),
+    ).toEqual(["/dev/acme/frontend"]);
   });
 
   it("matches failing-ci filter via ciByPath", () => {

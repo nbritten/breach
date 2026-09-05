@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseImport, SETTINGS_VERSION, type SettingsExport } from "./settingsIo";
+import { parseImport, SETTINGS_VERSION, isPortableFsPath, type SettingsExport } from "./settingsIo";
 
 const validPayload: SettingsExport = {
   version: SETTINGS_VERSION,
@@ -13,6 +13,8 @@ const validPayload: SettingsExport = {
     serviceRepos: ["foo"],
     terminalApp: "Ghostty",
     checkForUpdates: true,
+    scanNestedRepos: false,
+    groupNestedRepos: true,
   },
 };
 
@@ -91,5 +93,65 @@ describe("parseImport", () => {
       settings: { ...validPayload.settings, checkForUpdates: "yes" },
     };
     expect(() => parseImport(JSON.stringify(bad))).toThrow(/checkForUpdates/);
+  });
+
+  it("treats a missing scanNestedRepos as false (older exports stay importable)", () => {
+    const { scanNestedRepos: _s, ...withoutFlag } = validPayload.settings;
+    const old = { ...validPayload, settings: withoutFlag };
+    const parsed = parseImport(JSON.stringify(old));
+    expect(parsed.settings.scanNestedRepos).toBe(false);
+  });
+
+  it("accepts scanNestedRepos true", () => {
+    const payload = {
+      ...validPayload,
+      settings: { ...validPayload.settings, scanNestedRepos: true },
+    };
+    const parsed = parseImport(JSON.stringify(payload));
+    expect(parsed.settings.scanNestedRepos).toBe(true);
+  });
+
+  it("rejects a non-boolean scanNestedRepos", () => {
+    const bad = {
+      ...validPayload,
+      settings: { ...validPayload.settings, scanNestedRepos: "yes" },
+    };
+    expect(() => parseImport(JSON.stringify(bad))).toThrow(/scanNestedRepos/);
+  });
+
+  it("treats a missing groupNestedRepos as true (nested grouping defaults on)", () => {
+    const { groupNestedRepos: _g, ...withoutFlag } = validPayload.settings;
+    const old = { ...validPayload, settings: withoutFlag };
+    const parsed = parseImport(JSON.stringify(old));
+    expect(parsed.settings.groupNestedRepos).toBe(true);
+  });
+
+  it("accepts groupNestedRepos false", () => {
+    const payload = {
+      ...validPayload,
+      settings: { ...validPayload.settings, groupNestedRepos: false },
+    };
+    const parsed = parseImport(JSON.stringify(payload));
+    expect(parsed.settings.groupNestedRepos).toBe(false);
+  });
+
+  it("rejects a non-boolean groupNestedRepos", () => {
+    const bad = {
+      ...validPayload,
+      settings: { ...validPayload.settings, groupNestedRepos: "yes" },
+    };
+    expect(() => parseImport(JSON.stringify(bad))).toThrow(/groupNestedRepos/);
+  });
+});
+
+describe("isPortableFsPath", () => {
+  it("treats home-relative and absolute keys as filesystem paths", () => {
+    expect(isPortableFsPath("~/dev/acme/frontend")).toBe(true);
+    expect(isPortableFsPath("/Users/me/dev/acme/frontend")).toBe(true);
+  });
+
+  it("leaves basename pins alone", () => {
+    expect(isPortableFsPath("frontend")).toBe(false);
+    expect(isPortableFsPath("acme-frontend")).toBe(false);
   });
 });

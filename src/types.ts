@@ -71,4 +71,5 @@ export interface RepoSummary {
   has_upstream: boolean;
   last_commit: CommitInfo | null;
   error: string | null;
+  origin_slug: string | null;
 }

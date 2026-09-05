@@ -18,6 +18,23 @@ describe("branchForRepo", () => {
   it("uses FALLBACK when no default passed", () => {
     expect(branchForRepo("foo", {}, FALLBACK_DEFAULT_BRANCH)).toBe("main");
   });
+
+  it("prefers a path override over a basename override", () => {
+    expect(
+      branchForRepo(
+        "frontend",
+        { frontend: "develop", "/dev/acme/frontend": "release" },
+        "main",
+        "/dev/acme/frontend",
+      ),
+    ).toBe("release");
+  });
+
+  it("falls back to a basename override when no path key exists", () => {
+    expect(
+      branchForRepo("frontend", { frontend: "develop" }, "main", "/dev/acme/frontend"),
+    ).toBe("develop");
+  });
 });
 
 describe("buildServiceUrl", () => {

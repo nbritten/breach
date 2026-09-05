@@ -69,7 +69,7 @@ export function RepoDetail() {
     if (!repoPath || !repoName) return;
     Promise.all([getBranchOverrides(), getDefaultBranch()])
       .then(([overrides, fallback]) =>
-        setDefaultBranch(branchForRepo(repoName, overrides, fallback)),
+        setDefaultBranch(branchForRepo(repoName, overrides, fallback, repoPath)),
       )
       .catch((e) => console.warn("settings load failed", e));
   }, [repoPath, repoName]);

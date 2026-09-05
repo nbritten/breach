@@ -5,17 +5,23 @@ use std::path::PathBuf;
 use super::{expand, scan_git_repos, MAX_PARALLEL};
 
 /// Scan the repos directory for git repos and return a summary for each (branch, dirty,
-/// ahead/behind, last commit). Sorted alphabetically by name.
+/// ahead/behind, last commit). Sorted by name, then path so two checkouts that
+/// share a basename stay distinct.
+///
+/// `scan_nested` walks inside parent repos to surface nested checkouts and
+/// linked worktrees. When false, only immediate children of `repos_path` are
+/// considered — the original behavior.
 #[tauri::command]
-pub async fn list_repos(repos_path: String) -> Result<Vec<RepoSummary>, String> {
+pub async fn list_repos(repos_path: String, scan_nested: bool) -> Result<Vec<RepoSummary>, String> {
     let root = expand(&repos_path);
-    let candidates = scan_git_repos(&root).await?;
+    let candidates = scan_git_repos(&root, scan_nested).await?;
 
-    let mut summaries: Vec<RepoSummary> = stream::iter(candidates.into_iter().map(git::repo_summary))
-        .buffer_unordered(MAX_PARALLEL)
-        .collect()
-        .await;
-    summaries.sort_by(|a, b| a.name.cmp(&b.name));
+    let mut summaries: Vec<RepoSummary> =
+        stream::iter(candidates.into_iter().map(git::repo_summary))
+            .buffer_unordered(MAX_PARALLEL)
+            .collect()
+            .await;
+    summaries.sort_by(|a, b| a.name.cmp(&b.name).then(a.path.cmp(&b.path)));
     Ok(summaries)
 }
 
@@ -77,9 +83,19 @@ pub fn home_relative(path: String) -> String {
     home_relative_with_home(&path, dirs::home_dir())
 }
 
+/// Expand a leading `~` to the home directory. Absolute paths are unchanged.
+#[tauri::command]
+pub fn expand_path(path: String) -> String {
+    expand(&path).to_string_lossy().into_owned()
+}
+
 pub(crate) fn home_relative_with_home(path: &str, home: Option<PathBuf>) -> String {
-    let Some(home) = home else { return path.to_string() };
-    let Some(home_str) = home.to_str() else { return path.to_string() };
+    let Some(home) = home else {
+        return path.to_string();
+    };
+    let Some(home_str) = home.to_str() else {
+        return path.to_string();
+    };
     if path == home_str {
         return "~".to_string();
     }

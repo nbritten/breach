@@ -7,6 +7,8 @@ import {
   getPinnedRepos,
   getRepoOrgs,
   getReposPath,
+  getScanNestedRepos,
+  getGroupNestedRepos,
   getServiceRepos,
   getServiceUrlTemplate,
   getTerminalApp,
@@ -16,6 +18,8 @@ import {
   setPinnedRepos,
   setRepoOrgs,
   setReposPath,
+  setScanNestedRepos,
+  setGroupNestedRepos,
   setServiceRepos,
   setServiceUrlTemplate,
   setTerminalApp,
@@ -35,6 +39,8 @@ export interface SettingsExport {
     serviceRepos: string[];
     terminalApp: string;
     checkForUpdates: boolean;
+    scanNestedRepos: boolean;
+    groupNestedRepos: boolean;
   };
 }
 
@@ -51,6 +57,8 @@ export async function buildExport(): Promise<SettingsExport> {
     serviceRepos,
     terminalApp,
     checkForUpdates,
+    scanNestedRepos,
+    groupNestedRepos,
   ] = await Promise.all([
     getReposPath(),
     getDefaultBranch(),
@@ -61,19 +69,23 @@ export async function buildExport(): Promise<SettingsExport> {
     getServiceRepos(),
     getTerminalApp(),
     getCheckForUpdates(),
+    getScanNestedRepos(),
+    getGroupNestedRepos(),
   ]);
   return {
     version: SETTINGS_VERSION,
     settings: {
       reposPath: await api.homeRelative(reposPath),
       defaultBranch,
-      branchOverrides,
+      branchOverrides: await homeRelativeKeys(branchOverrides),
       repoOrgs,
-      pinnedRepos,
+      pinnedRepos: await Promise.all(pinnedRepos.map(homeRelativeIfPath)),
       serviceUrlTemplate,
-      serviceRepos,
+      serviceRepos: await Promise.all(serviceRepos.map(homeRelativeIfPath)),
       terminalApp,
       checkForUpdates,
+      scanNestedRepos,
+      groupNestedRepos,
     },
   };
 }
@@ -145,6 +157,16 @@ export function parseImport(text: string): SettingsExport {
   if (s.checkForUpdates !== undefined && typeof s.checkForUpdates !== "boolean") {
     throw new Error("`checkForUpdates` must be a boolean");
   }
+  // scanNestedRepos was added after v1 shipped; treat a missing value as
+  // false so older exports keep the original shallow-scan behavior.
+  if (s.scanNestedRepos !== undefined && typeof s.scanNestedRepos !== "boolean") {
+    throw new Error("`scanNestedRepos` must be a boolean");
+  }
+  // groupNestedRepos defaults on: it's the nested-scan companion, and a
+  // missing key should match the Settings checkbox's default-checked state.
+  if (s.groupNestedRepos !== undefined && typeof s.groupNestedRepos !== "boolean") {
+    throw new Error("`groupNestedRepos` must be a boolean");
+  }
 
   return {
     version: data.version,
@@ -159,6 +181,10 @@ export function parseImport(text: string): SettingsExport {
       terminalApp: typeof s.terminalApp === "string" ? s.terminalApp : "",
       checkForUpdates:
         typeof s.checkForUpdates === "boolean" ? s.checkForUpdates : true,
+      scanNestedRepos:
+        typeof s.scanNestedRepos === "boolean" ? s.scanNestedRepos : false,
+      groupNestedRepos:
+        typeof s.groupNestedRepos === "boolean" ? s.groupNestedRepos : true,
     },
   };
 }
@@ -175,6 +201,8 @@ export async function applyImport(payload: SettingsExport): Promise<void> {
     setServiceRepos(s.serviceRepos),
     setTerminalApp(s.terminalApp),
     setCheckForUpdates(s.checkForUpdates),
+    setScanNestedRepos(s.scanNestedRepos),
+    setGroupNestedRepos(s.groupNestedRepos),
   ]);
 }
 
@@ -200,6 +228,8 @@ function normalizeSettings(
     serviceRepos: s.serviceRepos.map((x) => x.trim()).filter((x) => x.length > 0),
     terminalApp: s.terminalApp.trim(),
     checkForUpdates: s.checkForUpdates,
+    scanNestedRepos: s.scanNestedRepos,
+    groupNestedRepos: s.groupNestedRepos,
   };
 }
 
@@ -213,4 +243,23 @@ function isStringArray(v: unknown): v is string[] {
 
 function isStringMap(v: unknown): v is Record<string, string> {
   return isObject(v) && Object.values(v).every((x) => typeof x === "string");
+}
+
+/** Absolute or `~/…` identity keys become home-relative in an export. */
+export function isPortableFsPath(s: string): boolean {
+  return s.startsWith("~") || s.startsWith("/");
+}
+
+async function homeRelativeIfPath(s: string): Promise<string> {
+  return isPortableFsPath(s) ? api.homeRelative(s) : s;
+}
+
+async function homeRelativeKeys(
+  map: Record<string, string>,
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(map)) {
+    out[await homeRelativeIfPath(k)] = v;
+  }
+  return out;
 }

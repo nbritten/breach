@@ -8,6 +8,8 @@ use notify_debouncer_full::{new_debouncer_opt, DebounceEventResult, Debouncer, N
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::git;
+
 use super::expand;
 
 /// Tauri-managed handle for the active filesystem watcher. Holding it alive
@@ -39,13 +41,115 @@ const REPO_CHANGED_EVENT: &str = "repo-changed";
 /// reflects an interactive edit within a couple frames.
 const DEBOUNCE_MS: u64 = 250;
 
-/// Find the repo this filesystem event belongs to: the immediate child directory
-/// of `repos_root` that the event path lives under. Returns None if the path
-/// isn't beneath the watched root or the event is on the root itself.
-fn repo_for_event(event_path: &Path, repos_root: &Path) -> Option<PathBuf> {
-    let rel = event_path.strip_prefix(repos_root).ok()?;
-    let first = rel.components().next()?;
-    Some(repos_root.join(first.as_os_str()))
+/// Find the repo this filesystem event belongs to.
+///
+/// Shallow mode (the default): the immediate child directory of `repos_root`
+/// that the event path lives under. Returns None if the path isn't beneath
+/// the watched root or the event is on the root itself.
+///
+/// Nested mode: the closest ancestor that is a git working tree, so a change
+/// inside `project/frontend` refreshes that nested repo rather than the
+/// parent. Events under `.git/worktrees/<id>/` resolve through Git's `gitdir`
+/// pointer to the linked checkout, not the parent repo that owns the metadata.
+fn repo_for_event(event_path: &Path, repos_root: &Path, nested: bool) -> Option<PathBuf> {
+    if nested {
+        if let Some(checkout) = worktree_checkout_for_event(event_path, repos_root) {
+            return Some(checkout);
+        }
+        closest_repo(event_path, repos_root, git::is_git_repo)
+    } else {
+        let rel = event_path.strip_prefix(repos_root).ok()?;
+        let first = rel.components().next()?;
+        Some(repos_root.join(first.as_os_str()))
+    }
+}
+
+/// Git stores a linked worktree's HEAD/index under
+/// `<repo>/.git/worktrees/<id>/`. The `gitdir` file in that folder points at
+/// the checkout's `.git` file (typically `…/feature-worktree/.git`). Reading
+/// it is how we attribute a gitdir-only event to the card for that checkout.
+fn worktree_gitdir_file(event_path: &Path) -> Option<PathBuf> {
+    let comps: Vec<_> = event_path.components().collect();
+    for i in 0..comps.len().saturating_sub(2) {
+        if comps[i].as_os_str() == ".git" && comps[i + 1].as_os_str() == "worktrees" {
+            let mut meta = PathBuf::new();
+            for c in comps.iter().take(i + 3) {
+                meta.push(c);
+            }
+            return Some(meta.join("gitdir"));
+        }
+    }
+    None
+}
+
+fn checkout_from_worktree_gitdir(gitdir_file: &Path) -> Option<PathBuf> {
+    let raw = std::fs::read_to_string(gitdir_file).ok()?;
+    let pointed = raw.trim();
+    let pointed = pointed
+        .strip_prefix("gitdir:")
+        .map(str::trim)
+        .unwrap_or(pointed);
+    if pointed.is_empty() {
+        return None;
+    }
+    let mut git_file = PathBuf::from(pointed);
+    if git_file.is_relative() {
+        git_file = gitdir_file.parent()?.join(git_file);
+    }
+    git_file.parent().map(PathBuf::from)
+}
+
+fn worktree_checkout_for_event(event_path: &Path, repos_root: &Path) -> Option<PathBuf> {
+    let gitdir_file = worktree_gitdir_file(event_path)?;
+    let checkout = checkout_from_worktree_gitdir(&gitdir_file)?;
+    if path_is_under(&checkout, repos_root) {
+        Some(checkout)
+    } else {
+        None
+    }
+}
+
+/// Containment after canonicalize so a gitdir pointer with `..` cannot
+/// attribute an event to a checkout outside the watched root. Falls back
+/// to a lexical check when canonicalize fails (dangling path).
+fn path_is_under(child: &Path, root: &Path) -> bool {
+    match (std::fs::canonicalize(child), std::fs::canonicalize(root)) {
+        (Ok(c), Ok(r)) => c == r || c.strip_prefix(&r).is_ok(),
+        _ => {
+            if child == root {
+                return true;
+            }
+            let Ok(rel) = child.strip_prefix(root) else {
+                return false;
+            };
+            // A lexical `..` after strip_prefix is not containment.
+            !rel.components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+        }
+    }
+}
+
+/// Walk from `event_path` up to `repos_root` (inclusive) and return the
+/// closest path for which `is_repo` is true, skipping anything inside a
+/// `.git` directory.
+fn closest_repo(
+    event_path: &Path,
+    repos_root: &Path,
+    is_repo: impl Fn(&Path) -> bool,
+) -> Option<PathBuf> {
+    if event_path != repos_root && event_path.strip_prefix(repos_root).is_err() {
+        return None;
+    }
+    let mut current = event_path;
+    loop {
+        if !git::path_is_inside_git_dir(current) && is_repo(current) {
+            return Some(current.to_path_buf());
+        }
+        if current == repos_root {
+            return None;
+        }
+        current = current.parent()?;
+    }
 }
 
 /// Should this event path be dropped instead of dispatched?
@@ -101,6 +205,7 @@ fn is_noise(path: &Path) -> bool {
 #[tauri::command]
 pub fn start_repos_watcher(
     repos_path: String,
+    scan_nested: bool,
     state: State<'_, WatcherState>,
     app: AppHandle,
 ) -> Result<(), String> {
@@ -175,7 +280,7 @@ pub fn start_repos_watcher(
                     if is_noise(path) {
                         continue;
                     }
-                    if let Some(repo) = repo_for_event(path, &root_for_task) {
+                    if let Some(repo) = repo_for_event(path, &root_for_task, scan_nested) {
                         affected.insert(repo);
                     }
                 }
@@ -216,7 +321,7 @@ mod tests {
         let root = PathBuf::from("/Users/me/repos");
         let event = PathBuf::from("/Users/me/repos/foo/src/main.rs");
         assert_eq!(
-            repo_for_event(&event, &root),
+            repo_for_event(&event, &root, false),
             Some(PathBuf::from("/Users/me/repos/foo")),
         );
     }
@@ -226,7 +331,7 @@ mod tests {
         let root = PathBuf::from("/Users/me/repos");
         let event = PathBuf::from("/Users/me/repos/foo/.git/HEAD");
         assert_eq!(
-            repo_for_event(&event, &root),
+            repo_for_event(&event, &root, false),
             Some(PathBuf::from("/Users/me/repos/foo")),
         );
     }
@@ -236,7 +341,7 @@ mod tests {
         let root = PathBuf::from("/Users/me/repos");
         let event = PathBuf::from("/Users/me/repos/foo");
         assert_eq!(
-            repo_for_event(&event, &root),
+            repo_for_event(&event, &root, false),
             Some(PathBuf::from("/Users/me/repos/foo")),
         );
     }
@@ -245,7 +350,7 @@ mod tests {
     fn returns_none_outside_root() {
         let root = PathBuf::from("/Users/me/repos");
         let event = PathBuf::from("/tmp/elsewhere");
-        assert_eq!(repo_for_event(&event, &root), None);
+        assert_eq!(repo_for_event(&event, &root, false), None);
     }
 
     #[test]
@@ -253,7 +358,180 @@ mod tests {
         // Stripping the prefix of root from itself gives an empty relative
         // path, which has no first component — no specific repo to dispatch.
         let root = PathBuf::from("/Users/me/repos");
-        assert_eq!(repo_for_event(&root, &root), None);
+        assert_eq!(repo_for_event(&root, &root, false), None);
+    }
+
+    fn nested_is_repo(path: &Path) -> bool {
+        // Simulate the user's layout without touching the filesystem:
+        // /Users/me/dev/project, .../frontend, .../backend, .../feature-worktree
+        matches!(
+            path.to_str(),
+            Some(
+                "/Users/me/dev/project"
+                    | "/Users/me/dev/project/frontend"
+                    | "/Users/me/dev/project/backend"
+                    | "/Users/me/dev/project/feature-worktree"
+            )
+        )
+    }
+
+    #[test]
+    fn nested_resolves_to_innermost_repo() {
+        let root = PathBuf::from("/Users/me/dev");
+        let event = PathBuf::from("/Users/me/dev/project/frontend/src/App.tsx");
+        assert_eq!(
+            closest_repo(&event, &root, nested_is_repo),
+            Some(PathBuf::from("/Users/me/dev/project/frontend")),
+        );
+    }
+
+    #[test]
+    fn nested_resolves_parent_when_change_is_in_parent() {
+        let root = PathBuf::from("/Users/me/dev");
+        let event = PathBuf::from("/Users/me/dev/project/README.md");
+        assert_eq!(
+            closest_repo(&event, &root, nested_is_repo),
+            Some(PathBuf::from("/Users/me/dev/project")),
+        );
+    }
+
+    #[test]
+    fn nested_resolves_worktree_checkout() {
+        let root = PathBuf::from("/Users/me/dev");
+        let event = PathBuf::from("/Users/me/dev/project/feature-worktree/src/lib.rs");
+        assert_eq!(
+            closest_repo(&event, &root, nested_is_repo),
+            Some(PathBuf::from("/Users/me/dev/project/feature-worktree")),
+        );
+    }
+
+    #[test]
+    fn nested_does_not_resolve_internal_worktrees_metadata() {
+        let root = PathBuf::from("/Users/me/dev");
+        let event = PathBuf::from("/Users/me/dev/project/.git/worktrees/feature-worktree/HEAD");
+        // Without a gitdir pointer, walk past the metadata dir to the parent
+        // checkout rather than treating the metadata folder as a repo.
+        assert_eq!(
+            closest_repo(&event, &root, nested_is_repo),
+            Some(PathBuf::from("/Users/me/dev/project")),
+        );
+    }
+
+    #[test]
+    fn worktree_gitdir_file_from_head_event() {
+        let event = PathBuf::from("/Users/me/dev/project/.git/worktrees/feature-worktree/HEAD");
+        assert_eq!(
+            worktree_gitdir_file(&event),
+            Some(PathBuf::from(
+                "/Users/me/dev/project/.git/worktrees/feature-worktree/gitdir"
+            )),
+        );
+    }
+
+    #[test]
+    fn worktree_gitdir_file_ignores_ordinary_git_paths() {
+        assert_eq!(
+            worktree_gitdir_file(Path::new("/Users/me/dev/project/.git/HEAD")),
+            None,
+        );
+        assert_eq!(
+            worktree_gitdir_file(Path::new("/Users/me/dev/project/src/main.rs")),
+            None,
+        );
+    }
+
+    #[test]
+    fn checkout_from_gitdir_file_absolute() {
+        let dir = std::env::temp_dir().join(format!(
+            "breach-wt-gitdir-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let gitdir = dir.join("gitdir");
+        std::fs::write(&gitdir, "/Users/me/dev/project/feature-worktree/.git\n").unwrap();
+        assert_eq!(
+            checkout_from_worktree_gitdir(&gitdir),
+            Some(PathBuf::from("/Users/me/dev/project/feature-worktree")),
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn nested_worktree_metadata_event_resolves_to_checkout() {
+        let root = std::env::temp_dir().join(format!(
+            "breach-wt-event-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let checkout = root.join("project/feature-worktree");
+        let meta = root.join("project/.git/worktrees/feature-worktree");
+        std::fs::create_dir_all(&checkout).unwrap();
+        std::fs::create_dir_all(&meta).unwrap();
+        std::fs::write(
+            checkout.join(".git"),
+            format!("gitdir: {}\n", meta.display()),
+        )
+        .unwrap();
+        std::fs::write(
+            meta.join("gitdir"),
+            format!("{}\n", checkout.join(".git").display()),
+        )
+        .unwrap();
+        let event = meta.join("HEAD");
+        assert_eq!(repo_for_event(&event, &root, true), Some(checkout),);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn worktree_gitdir_dotdot_outside_root_is_rejected() {
+        let tmp = std::env::temp_dir().join(format!(
+            "breach-wt-escape-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let root = tmp.join("root");
+        let outside = tmp.join("outside");
+        let meta = root.join("project/.git/worktrees/evil");
+        std::fs::create_dir_all(&meta).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join(".git"), "gitdir: dummy\n").unwrap();
+        let pointed = root.join("../outside/.git");
+        std::fs::write(meta.join("gitdir"), format!("{}\n", pointed.display())).unwrap();
+        let event = meta.join("HEAD");
+        let checkout = checkout_from_worktree_gitdir(&meta.join("gitdir")).unwrap();
+        assert!(
+            checkout.strip_prefix(&root).is_ok(),
+            "lexical strip_prefix would accept {checkout:?} under {root:?}"
+        );
+        assert_eq!(worktree_checkout_for_event(&event, &root), None);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn nested_returns_none_outside_root() {
+        let root = PathBuf::from("/Users/me/dev");
+        let event = PathBuf::from("/tmp/elsewhere");
+        assert_eq!(closest_repo(&event, &root, nested_is_repo), None);
+    }
+
+    #[test]
+    fn nested_includes_root_when_root_is_a_repo() {
+        let root = PathBuf::from("/Users/me/dev/project");
+        let event = PathBuf::from("/Users/me/dev/project/README.md");
+        assert_eq!(
+            closest_repo(&event, &root, nested_is_repo),
+            Some(PathBuf::from("/Users/me/dev/project")),
+        );
     }
 
     #[test]

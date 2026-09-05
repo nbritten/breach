@@ -28,7 +28,9 @@ interface Props {
   authoredPrs?: PrInfo[];
   reviewPrs?: PrInfo[];
   pinned?: boolean;
-  onTogglePin?: (name: string) => void;
+  onTogglePin?: (key: string) => void;
+  pinKey?: string;
+  pathLabel?: string | null;
   ci?: CiStatus;
   activeAgents?: ReadonlySet<AgentProvider>;
   docsUrl?: string | null;
@@ -59,6 +61,8 @@ export const RepoCard = memo(function RepoCard({
   reviewPrs = [],
   pinned = false,
   onTogglePin,
+  pinKey,
+  pathLabel,
   ci,
   activeAgents,
   docsUrl,
@@ -156,7 +160,19 @@ export const RepoCard = memo(function RepoCard({
               &gt;_
             </span>
           )}
-          <h3 className="font-semibold truncate">{repo.name}</h3>
+          <div className="min-w-0">
+            <h3 className="font-semibold truncate" title={repo.path}>
+              {repo.name}
+            </h3>
+            {pathLabel && (
+              <p
+                className="text-[10px] text-neutral-500 font-mono truncate"
+                title={repo.path}
+              >
+                {pathLabel}
+              </p>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {repo.dirty && (
@@ -169,7 +185,7 @@ export const RepoCard = memo(function RepoCard({
               onClick={(e: MouseEvent) => {
                 e.preventDefault();
                 e.stopPropagation();
-                onTogglePin(repo.name);
+                onTogglePin(pinKey ?? repo.name);
               }}
               title={pinned ? "Unpin" : "Pin"}
               aria-label={pinned ? "Unpin" : "Pin"}

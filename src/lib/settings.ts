@@ -17,6 +17,8 @@ const SERVICE_URL_TEMPLATE_KEY = "serviceUrlTemplate";
 const SERVICE_REPOS_KEY = "serviceRepos";
 const TERMINAL_APP_KEY = "terminalApp";
 const CHECK_FOR_UPDATES_KEY = "checkForUpdates";
+const SCAN_NESTED_REPOS_KEY = "scanNestedRepos";
+const GROUP_NESTED_REPOS_KEY = "groupNestedRepos";
 const DEMO_MODE_KEY = "demoMode";
 const TERMINAL_WORKSPACE_KEY = "terminalWorkspace";
 
@@ -42,11 +44,12 @@ export async function setReposPath(path: string): Promise<void> {
 }
 
 export async function getBranchOverrides(): Promise<Record<string, string>> {
-  return (await store.get<Record<string, string>>(BRANCH_OVERRIDES_KEY)) ?? {};
+  const map = (await store.get<Record<string, string>>(BRANCH_OVERRIDES_KEY)) ?? {};
+  return expandStoredPathKeys(map);
 }
 
 export async function setBranchOverrides(map: Record<string, string>): Promise<void> {
-  await store.set(BRANCH_OVERRIDES_KEY, map);
+  await store.set(BRANCH_OVERRIDES_KEY, await expandStoredPathKeys(map));
   await store.save();
 }
 
@@ -69,7 +72,8 @@ export async function setRepoOrgs(list: string[]): Promise<void> {
 }
 
 export async function getPinnedRepos(): Promise<string[]> {
-  return (await store.get<string[]>(PINNED_REPOS_KEY)) ?? [];
+  const list = (await store.get<string[]>(PINNED_REPOS_KEY)) ?? [];
+  return Promise.all(list.map(expandStoredPath));
 }
 
 // Demo mode pins the curated 10 repos at the top regardless of the user's real
@@ -101,11 +105,13 @@ export async function setServiceUrlTemplate(tpl: string): Promise<void> {
 }
 
 export async function getServiceRepos(): Promise<string[]> {
-  return (await store.get<string[]>(SERVICE_REPOS_KEY)) ?? [];
+  const list = (await store.get<string[]>(SERVICE_REPOS_KEY)) ?? [];
+  return Promise.all(list.map(expandStoredPath));
 }
 
 export async function setServiceRepos(list: string[]): Promise<void> {
-  await store.set(SERVICE_REPOS_KEY, list);
+  const expanded = await Promise.all(list.map(expandStoredPath));
+  await store.set(SERVICE_REPOS_KEY, expanded);
   await store.save();
 }
 
@@ -124,6 +130,24 @@ export async function getCheckForUpdates(): Promise<boolean> {
 
 export async function setCheckForUpdates(enabled: boolean): Promise<void> {
   await store.set(CHECK_FOR_UPDATES_KEY, enabled);
+  await store.save();
+}
+
+export async function getScanNestedRepos(): Promise<boolean> {
+  return (await store.get<boolean>(SCAN_NESTED_REPOS_KEY)) ?? false;
+}
+
+export async function setScanNestedRepos(enabled: boolean): Promise<void> {
+  await store.set(SCAN_NESTED_REPOS_KEY, enabled);
+  await store.save();
+}
+
+export async function getGroupNestedRepos(): Promise<boolean> {
+  return (await store.get<boolean>(GROUP_NESTED_REPOS_KEY)) ?? true;
+}
+
+export async function setGroupNestedRepos(enabled: boolean): Promise<void> {
+  await store.set(GROUP_NESTED_REPOS_KEY, enabled);
   await store.save();
 }
 
@@ -214,7 +238,8 @@ export async function setOnboarded(v: boolean): Promise<void> {
 }
 
 export async function setPinnedRepos(list: string[]): Promise<void> {
-  await store.set(PINNED_REPOS_KEY, list);
+  const expanded = await Promise.all(list.map(expandStoredPath));
+  await store.set(PINNED_REPOS_KEY, expanded);
   await store.save();
 }
 
@@ -222,6 +247,24 @@ export function branchForRepo(
   repoName: string,
   overrides: Record<string, string>,
   defaultBranch: string,
+  repoPath?: string,
 ): string {
+  if (repoPath && overrides[repoPath]) return overrides[repoPath];
   return overrides[repoName] ?? defaultBranch;
+}
+
+/** `~/…` pins and override keys expand so they match absolute `repo.path`. */
+async function expandStoredPath(s: string): Promise<string> {
+  if (!s.startsWith("~")) return s;
+  return api.expandPath(s);
+}
+
+async function expandStoredPathKeys(
+  map: Record<string, string>,
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(map)) {
+    out[await expandStoredPath(k)] = v;
+  }
+  return out;
 }

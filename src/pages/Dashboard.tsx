@@ -15,6 +15,8 @@ import {
   getEffectivePinnedRepos,
   getRepoOrgs,
   getReposPath,
+  getScanNestedRepos,
+  getGroupNestedRepos,
   getServiceRepos,
   getServiceUrlTemplate,
   openTerminal,
@@ -40,20 +42,25 @@ import type {
   AgentSession,
   CiStatus,
   MyPrs,
-  PrInfo,
   RepoSummary,
 } from "../types";
 import {
   filterByChips,
   filterRepos,
   groupRepos,
+  isRepoPinned,
+  matchesIdentityKey,
+  prsForRepo,
+  repoPinKey,
+  repoPathLabel,
+  sortRepos,
+  togglePinnedOrder,
   REPO_FILTER_ORDER,
   repoFilterLabel,
   repoFilterCounts,
   type RepoFilter,
 } from "../lib/dashboard";
 
-const EMPTY_PRS: PrInfo[] = [];
 const SyncAllModal = lazy(() =>
   import("../components/SyncAllModal").then((module) => ({
     default: module.SyncAllModal,
@@ -64,7 +71,6 @@ const CloneMissingModal = lazy(() =>
     default: module.CloneMissingModal,
   })),
 );
-
 export function Dashboard() {
   const navigate = useNavigate();
   const { sessions: terminalSessions, open: openEmbeddedTerminal } =
@@ -73,6 +79,8 @@ export function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reposPath, setPath] = useState<string>("");
+  const [scanNested, setScanNested] = useState(false);
+  const [groupNested, setGroupNested] = useState(true);
   const [showSyncAll, setShowSyncAll] = useState(false);
   const [showClone, setShowClone] = useState(false);
   const [pinnedOrder, setPinnedOrder] = useState<string[]>([]);
@@ -105,17 +113,17 @@ export function Dashboard() {
   );
 
   const togglePin = useCallback(
-    async (name: string) => {
-      const next = pinnedOrder.includes(name)
-        ? pinnedOrder.filter((n) => n !== name)
-        : [...pinnedOrder, name];
+    async (key: string) => {
+      const repo = repos.find((r) => r.path === key || r.name === key);
+      if (!repo) return;
+      const next = togglePinnedOrder(repo, repos, pinnedOrder);
       setPinnedOrder(next);
       // setEffectivePinnedRepos routes to either the real settings store or
       // demo mode's in-memory store, so pinning during a demo session updates
       // the dashboard without leaking demo names into real pinnedRepos.
       await setEffectivePinnedRepos(next);
     },
-    [pinnedOrder],
+    [pinnedOrder, repos],
   );
 
   const refreshPrs = useCallback((forOrgs: string[]) => {
@@ -152,10 +160,16 @@ export function Dashboard() {
       // If getReposPath throws we bail before awaiting settingsReads; the
       // no-op catch keeps that from surfacing as an unhandled rejection.
       settingsReads.catch(() => {});
-      const path = await getReposPath();
+      const [path, nested, group] = await Promise.all([
+        getReposPath(),
+        getScanNestedRepos(),
+        getGroupNestedRepos(),
+      ]);
       setPath(path);
+      setScanNested(nested);
+      setGroupNested(group);
       const [list, [pinned, nextOrgs, tpl, services]] = await Promise.all([
-        api.listRepos(path),
+        api.listRepos(path, nested),
         settingsReads,
       ]);
       setRepos(list);
@@ -261,10 +275,10 @@ export function Dashboard() {
   // get push-style updates instead of relying on the Refresh button.
   useEffect(() => {
     if (!reposPath) return;
-    api.startReposWatcher(reposPath).catch((err) => {
+    api.startReposWatcher(reposPath, scanNested).catch((err) => {
       console.warn("startReposWatcher failed", err);
     });
-  }, [reposPath]);
+  }, [reposPath, scanNested]);
 
   // Listen for repo-changed events emitted by the watcher and re-fetch just
   // the affected repo. Reads the latest repo list via a ref so the listener
@@ -331,14 +345,19 @@ export function Dashboard() {
       return next;
     });
 
+  const orderedRepos = useMemo(
+    () => sortRepos(repos, scanNested && groupNested),
+    [repos, scanNested, groupNested],
+  );
+
   // Counts come from the search-filtered set, not the chip-filtered set, so
   // the count next to "Dirty" is "dirty among repos matching your search",
   // not "dirty among repos already filtered by other active chips" (which
   // would create weird interactions where activating Behind shrinks the Dirty
   // count).
   const searchFiltered = useMemo(
-    () => filterRepos(repos, query),
-    [repos, query],
+    () => filterRepos(orderedRepos, query),
+    [orderedRepos, query],
   );
 
   const filterCounts = useMemo(
@@ -353,10 +372,9 @@ export function Dashboard() {
   );
 
   const sections = useMemo(
-    () => groupRepos(filteredRepos, pinnedOrder),
-    [filteredRepos, pinnedOrder],
+    () => groupRepos(filteredRepos, pinnedOrder, repos),
+    [filteredRepos, pinnedOrder, repos],
   );
-  const pinnedSet = useMemo(() => new Set(pinnedOrder), [pinnedOrder]);
 
   const toggle = (key: string) =>
     setCollapsed((c) => ({ ...c, [key]: !c[key] }));
@@ -556,14 +574,16 @@ export function Dashboard() {
                           key={r.path}
                           repo={r}
                           onRefresh={refreshOne}
-                          authoredPrs={prs.authored[r.name] ?? EMPTY_PRS}
-                          reviewPrs={prs.review_requested[r.name] ?? EMPTY_PRS}
-                          pinned={pinnedSet.has(r.name)}
+                          authoredPrs={prsForRepo(r, prs.authored)}
+                          reviewPrs={prsForRepo(r, prs.review_requested)}
+                          pinned={isRepoPinned(r, pinnedOrder, repos)}
                           onTogglePin={togglePin}
+                          pinKey={repoPinKey(r, repos)}
+                          pathLabel={repoPathLabel(r, repos)}
                           ci={ciByPath[r.path]}
                           activeAgents={agentsByPath[r.path]}
                           docsUrl={
-                            serviceSet.has(r.name)
+                            matchesIdentityKey(r, [...serviceSet], repos)
                               ? buildServiceUrl(serviceTpl, r.name)
                               : null
                           }
@@ -596,6 +616,7 @@ export function Dashboard() {
         <Suspense fallback={null}>
           <CloneMissingModal
             reposPath={reposPath}
+            scanNested={scanNested}
             onClose={() => {
               setShowClone(false);
               refresh();

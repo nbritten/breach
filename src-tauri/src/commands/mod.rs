@@ -7,7 +7,10 @@ pub mod sync;
 pub mod terminal;
 pub mod watcher;
 
+use crate::git;
 use futures::stream::{self, StreamExt};
+use std::collections::HashSet;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
@@ -30,11 +33,33 @@ pub fn expand(path: &str) -> PathBuf {
     expand_with_home(path, dirs::home_dir())
 }
 
-/// Scan a directory for immediate subdirectories that are git repositories.
-/// Sorted by path for deterministic ordering. Empty Vec if the directory doesn't
-/// exist — the dashboard's empty state is a better surface for "you haven't
-/// configured a real path yet" than a red error toast.
-pub async fn scan_git_repos(root: &Path) -> Result<Vec<PathBuf>, String> {
+/// Scan a directory for git repositories.
+///
+/// When `nested` is false (the default user-facing behavior), only immediate
+/// child directories that are git repos are returned — the original "folder of
+/// clones" layout.
+///
+/// When `nested` is true, walk the tree and return every working tree: the
+/// configured root if it is itself a repo, parent repos, nested repos, and
+/// linked worktrees (`.git` file). Git's internal `.git/worktrees/*` metadata
+/// is never surfaced. Build and package directories (`node_modules`, `target`,
+/// …) are not descended into (a checkout with those names is still listed),
+/// and the walk stops at [`NESTED_SCAN_MAX_DEPTH`]. Skip names also cover
+/// home-directory trees (`Library`, `.npm`, `Applications`) so a repos path
+/// of `$HOME` does not crawl caches and apps.
+///
+/// Sorted by path for deterministic ordering. Empty Vec if the directory
+/// doesn't exist — the dashboard's empty state is a better surface for "you
+/// haven't configured a real path yet" than a red error toast.
+pub async fn scan_git_repos(root: &Path, nested: bool) -> Result<Vec<PathBuf>, String> {
+    if nested {
+        scan_git_repos_nested(root).await
+    } else {
+        scan_git_repos_shallow(root).await
+    }
+}
+
+async fn scan_git_repos_shallow(root: &Path) -> Result<Vec<PathBuf>, String> {
     let mut entries = match fs::read_dir(root).await {
         Ok(e) => e,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -58,6 +83,135 @@ pub async fn scan_git_repos(root: &Path) -> Result<Vec<PathBuf>, String> {
         .collect()
         .await;
     let mut candidates: Vec<PathBuf> = checked.into_iter().flatten().collect();
+    candidates.sort();
+    Ok(candidates)
+}
+
+fn should_skip_nested_dir(name: &OsStr) -> bool {
+    NESTED_SCAN_SKIP.iter().any(|n| name == *n)
+}
+
+/// Depth 0 is the configured repos path. Depth 8 covers
+/// `~/dev/org/project/nested` with room to spare. Combined with the skip
+/// list this keeps a mis-pointed scan of `$HOME` from walking Library,
+/// package caches, and Applications.
+pub(crate) const NESTED_SCAN_MAX_DEPTH: usize = 8;
+
+/// Directories that are never descended into during a nested scan.
+/// `.git` is Git metadata (including `worktrees/`). The rest are package/build
+/// trees that can dwarf the source. If one of those names *is* itself a
+/// checkout, it is still listed — we just do not walk inside it.
+const NESTED_SCAN_SKIP: &[&str] = &[
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".next",
+    ".nuxt",
+    ".output",
+    ".venv",
+    "venv",
+    "vendor",
+    "__pycache__",
+    ".cache",
+    "Pods",
+    "coverage",
+    ".turbo",
+    ".parcel-cache",
+    ".svelte-kit",
+    ".gradle",
+    ".yarn",
+    "bower_components",
+    ".tox",
+    "site-packages",
+    ".Trash",
+    "Library",
+    ".npm",
+    ".cargo",
+    ".rustup",
+    ".local",
+    "Applications",
+];
+
+async fn scan_git_repos_nested(root: &Path) -> Result<Vec<PathBuf>, String> {
+    let canonical_root = match fs::canonicalize(root).await {
+        Ok(path) => path,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("cannot resolve {}: {e}", root.display())),
+    };
+    let mut candidates = Vec::new();
+    if git::is_git_repo(root) {
+        candidates.push(root.to_path_buf());
+    }
+
+    let mut visited: HashSet<PathBuf> = HashSet::new();
+    visited.insert(canonical_root.clone());
+
+    let mut stack = vec![(root.to_path_buf(), 0usize)];
+    while let Some((dir, depth)) = stack.pop() {
+        let is_root = dir.as_path() == root;
+        let mut entries = match fs::read_dir(&dir).await {
+            Ok(e) => e,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound && is_root => {
+                return Ok(Vec::new());
+            }
+            Err(e) if is_root => {
+                return Err(format!("cannot read {}: {e}", root.display()));
+            }
+            // A nested directory we can't read (permissions, dangling
+            // symlink after metadata raced) must not wipe the whole scan.
+            Err(_) => continue,
+        };
+        loop {
+            let entry = match entries.next_entry().await {
+                Ok(Some(e)) => e,
+                Ok(None) => break,
+                Err(_) => break,
+            };
+            let path = entry.path();
+            let skip_descend = should_skip_nested_dir(&entry.file_name());
+            // Follow symlinks, matching the shallow scan: a child that is a
+            // symlink-to-dir with a `.git` entry is a repo, not a hole.
+            let meta = match fs::metadata(&path).await {
+                Ok(m) => m,
+                Err(_) => continue,
+            };
+            if !meta.is_dir() {
+                continue;
+            }
+            // Following symlinks is useful for repo aliases, but recursive
+            // discovery must never escape the directory the user selected.
+            // Fail closed if a child cannot be resolved or resolves elsewhere.
+            let Ok(canonical_path) = fs::canonicalize(&path).await else {
+                continue;
+            };
+            if canonical_path != canonical_root
+                && canonical_path.strip_prefix(&canonical_root).is_err()
+            {
+                continue;
+            }
+            let child_depth = depth + 1;
+            if child_depth > NESTED_SCAN_MAX_DEPTH {
+                continue;
+            }
+            if git::is_git_repo(&path) {
+                candidates.push(path.clone());
+            }
+            // Build/package trees may themselves be a checkout we should
+            // show, but they are never descended into.
+            if skip_descend || child_depth == NESTED_SCAN_MAX_DEPTH {
+                continue;
+            }
+            // Keep walking inside repos so nested checkouts and worktrees
+            // show up independently of their parent. Canonical paths stop
+            // symlink cycles and make aliases of the same directory converge.
+            if !visited.insert(canonical_path) {
+                continue;
+            }
+            stack.push((path, child_depth));
+        }
+    }
     candidates.sort();
     Ok(candidates)
 }
@@ -128,8 +282,276 @@ mod tests {
         // A non-existent reposPath is the fresh-install default. The dashboard's
         // empty state is a better surface than a red error toast.
         let nowhere = PathBuf::from("/this/path/should/not/exist/by/any/chance");
-        let result = scan_git_repos(&nowhere).await;
+        let result = scan_git_repos(&nowhere, false).await;
         assert_eq!(result, Ok(vec![]));
+        let nested = scan_git_repos(&nowhere, true).await;
+        assert_eq!(nested, Ok(vec![]));
+    }
+
+    fn unique_temp_dir() -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "breach-scan-{}-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn rel(root: &Path, path: &Path) -> PathBuf {
+        path.strip_prefix(root).unwrap_or(path).to_path_buf()
+    }
+
+    /// Layout matching the feature's motivating example:
+    ///
+    /// ```text
+    /// root/
+    ///   project/.git/                  (parent repo)
+    ///   project/frontend/.git/         (nested repo)
+    ///   project/backend/.git/          (nested repo)
+    ///   project/feature-worktree/.git  (linked worktree — .git is a file)
+    ///   project/.git/worktrees/feature-worktree/  (Git metadata — not a repo)
+    ///   notes/readme.txt               (non-repo sibling)
+    /// ```
+    fn seed_nested_layout(root: &Path) {
+        std::fs::create_dir_all(root.join("project/.git/worktrees/feature-worktree")).unwrap();
+        std::fs::create_dir_all(root.join("project/frontend/.git")).unwrap();
+        std::fs::create_dir_all(root.join("project/backend/.git")).unwrap();
+        std::fs::create_dir_all(root.join("project/feature-worktree")).unwrap();
+        std::fs::write(
+            root.join("project/feature-worktree/.git"),
+            "gitdir: ../.git/worktrees/feature-worktree\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("notes")).unwrap();
+        std::fs::write(root.join("notes/readme.txt"), "hi").unwrap();
+    }
+
+    #[tokio::test]
+    async fn scan_shallow_only_immediate_children() {
+        let root = unique_temp_dir();
+        seed_nested_layout(&root);
+        let found = scan_git_repos(&root, false).await.unwrap();
+        let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
+        assert_eq!(rels, vec![PathBuf::from("project")]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_finds_parent_nested_and_worktree() {
+        let root = unique_temp_dir();
+        seed_nested_layout(&root);
+        let found = scan_git_repos(&root, true).await.unwrap();
+        let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
+        assert_eq!(
+            rels,
+            vec![
+                PathBuf::from("project"),
+                PathBuf::from("project/backend"),
+                PathBuf::from("project/feature-worktree"),
+                PathBuf::from("project/frontend"),
+            ]
+        );
+        assert!(
+            found
+                .iter()
+                .all(|p| !p.components().any(|c| c.as_os_str() == "worktrees")),
+            "Git worktree metadata must not be surfaced as a repo"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_includes_root_when_it_is_a_repo() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        std::fs::create_dir_all(root.join("frontend/.git")).unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        assert!(found.iter().any(|p| p == &root));
+        assert!(found.iter().any(|p| p == &root.join("frontend")));
+        // Shallow scan still only looks at children, preserving prior behavior.
+        let shallow = scan_git_repos(&root, false).await.unwrap();
+        assert_eq!(shallow, vec![root.join("frontend")]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_skips_node_modules() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("app/.git")).unwrap();
+        std::fs::create_dir_all(root.join("app/node_modules/leftpad/.git")).unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
+        assert_eq!(rels, vec![PathBuf::from("app")]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_skips_rust_target_dir() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("app/.git")).unwrap();
+        std::fs::create_dir_all(root.join("app/target/debug/.git")).unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
+        assert_eq!(rels, vec![PathBuf::from("app")]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_skips_home_library_dir() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("app/.git")).unwrap();
+        std::fs::create_dir_all(root.join("Library/Caches/foo/.git")).unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
+        assert_eq!(rels, vec![PathBuf::from("app")]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_lists_skip_named_dir_when_it_is_a_repo() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("build/.git")).unwrap();
+        std::fs::create_dir_all(root.join("build/nested/.git")).unwrap();
+        std::fs::create_dir_all(root.join("app/.git")).unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
+        assert_eq!(
+            rels,
+            vec![PathBuf::from("app"), PathBuf::from("build")],
+            "a checkout named build should appear, but we must not walk inside it"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_stops_at_max_depth() {
+        let root = unique_temp_dir();
+        let mut at_max = root.clone();
+        for i in 1..=NESTED_SCAN_MAX_DEPTH {
+            at_max.push(format!("d{i}"));
+        }
+        std::fs::create_dir_all(at_max.join(".git")).unwrap();
+        let mut too_deep = at_max.clone();
+        too_deep.push("d_too_deep");
+        std::fs::create_dir_all(too_deep.join(".git")).unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        assert!(
+            found.iter().any(|p| p == &at_max),
+            "repo at max depth should be listed"
+        );
+        assert!(
+            found.iter().all(|p| p != &too_deep),
+            "repo past max depth must not be listed: {found:?}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_keeps_same_basename_checkouts_distinct() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("acme/frontend/.git")).unwrap();
+        std::fs::create_dir_all(root.join("beta/frontend/.git")).unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
+        assert_eq!(
+            rels,
+            vec![
+                PathBuf::from("acme/frontend"),
+                PathBuf::from("beta/frontend"),
+            ]
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_follows_symlink_to_dir_as_repo() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("actual/.git")).unwrap();
+        std::os::unix::fs::symlink(root.join("actual"), root.join("link")).unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
+        assert!(
+            rels.contains(&PathBuf::from("actual")),
+            "real dir should be listed: {rels:?}"
+        );
+        assert!(
+            rels.contains(&PathBuf::from("link")),
+            "symlink-to-dir should be listed like the shallow scan: {rels:?}"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_does_not_follow_symlink_outside_root() {
+        let tmp = unique_temp_dir();
+        let root = tmp.join("root");
+        let outside = tmp.join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(outside.join("secret-repo/.git")).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("escape")).unwrap();
+
+        let found = scan_git_repos(&root, true).await.unwrap();
+
+        assert!(
+            found.is_empty(),
+            "outside repositories leaked into scan: {found:?}"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_symlink_loop_does_not_hang() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("loop/.git")).unwrap();
+        std::os::unix::fs::symlink(root.join("loop"), root.join("loop/back")).unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        assert!(found.iter().any(|p| p == &root.join("loop")));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_skips_git_submodules() {
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("project/.git/modules/vendor-lib")).unwrap();
+        std::fs::create_dir_all(root.join("project/vendor-lib")).unwrap();
+        std::fs::write(
+            root.join("project/vendor-lib/.git"),
+            "gitdir: ../.git/modules/vendor-lib\n",
+        )
+        .unwrap();
+        let found = scan_git_repos(&root, true).await.unwrap();
+        let rels: Vec<PathBuf> = found.iter().map(|p| rel(&root, p)).collect();
+        assert_eq!(rels, vec![PathBuf::from("project")]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_skips_unreadable_directory() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = unique_temp_dir();
+        std::fs::create_dir_all(root.join("visible/.git")).unwrap();
+        let secret = root.join("secret");
+        std::fs::create_dir_all(&secret).unwrap();
+        let mut perms = std::fs::metadata(&secret).unwrap().permissions();
+        perms.set_mode(0o000);
+        std::fs::set_permissions(&secret, perms.clone()).unwrap();
+        let found = scan_git_repos(&root, true).await;
+        perms.set_mode(0o755);
+        let _ = std::fs::set_permissions(&secret, perms);
+        let rels: Vec<PathBuf> = found
+            .expect("unreadable nested dir must not fail the scan")
+            .iter()
+            .map(|p| rel(&root, p))
+            .collect();
+        assert_eq!(rels, vec![PathBuf::from("visible")]);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[tokio::test]
@@ -149,7 +571,7 @@ mod tests {
             .unwrap();
         fs::create_dir_all(root.join("ordinary-dir")).await.unwrap();
 
-        let found = scan_git_repos(&root).await.unwrap();
+        let found = scan_git_repos(&root, false).await.unwrap();
         assert_eq!(found, vec![repo, worktree]);
 
         fs::remove_dir_all(root).await.unwrap();

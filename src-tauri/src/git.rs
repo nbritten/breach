@@ -17,6 +17,9 @@ pub struct RepoSummary {
     pub has_upstream: bool,
     pub last_commit: Option<CommitInfo>,
     pub error: Option<String>,
+    /// `org/name` from `origin`, when the remote URL parses. Used to attach
+    /// GitHub PRs to a checkout when two local folders share a basename.
+    pub origin_slug: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -50,6 +53,60 @@ pub async fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+/// A directory counts as a git repo iff it has a `.git` entry: a directory in
+/// normal clones, a gitdir-pointer file in linked worktrees.
+/// Git submodules also use a `.git` file, but it points at `.git/modules/…`
+/// inside the parent — those are not independent checkouts and must not
+/// become dashboard cards or Sync targets.
+///
+/// We deliberately don't fall back to `git rev-parse --is-inside-work-tree` —
+/// that spawned a process for every non-repo directory on every scan, and it
+/// answers the wrong question anyway: it's true for any directory nested
+/// inside some outer work tree, not just repo roots. Bare repos (no `.git`
+/// entry) are intentionally not detected; the dashboard has nothing useful to
+/// show for them.
+///
+/// Paths inside a `.git` directory (for example `.git/worktrees/<name>`) are
+/// never repos — that's Git's internal worktree metadata, not a checkout.
+pub fn is_git_repo(path: &Path) -> bool {
+    if path_is_inside_git_dir(path) {
+        return false;
+    }
+    let git_entry = path.join(".git");
+    if git_entry.is_dir() {
+        return true;
+    }
+    if git_entry.is_file() {
+        return !git_file_points_at_submodule(&git_entry);
+    }
+    false
+}
+
+fn git_file_points_at_submodule(git_file: &Path) -> bool {
+    let Ok(raw) = std::fs::read_to_string(git_file) else {
+        return false;
+    };
+    gitdir_points_at_submodule(&raw)
+}
+
+/// True when a `.git` gitfile's `gitdir:` pointer targets the parent's
+/// `.git/modules/` directory (a submodule), not a linked worktree.
+pub(crate) fn gitdir_points_at_submodule(contents: &str) -> bool {
+    let pointed = contents.trim();
+    let pointed = pointed
+        .strip_prefix("gitdir:")
+        .map(str::trim)
+        .unwrap_or(pointed);
+    let normalized = pointed.replace('\\', "/");
+    normalized.contains("/.git/modules/") || normalized.contains(".git/modules/")
+}
+
+/// True when `path` has a `.git` path component — i.e. it lives inside Git's
+/// private metadata, not in a working tree.
+pub fn path_is_inside_git_dir(path: &Path) -> bool {
+    path.components().any(|c| c.as_os_str() == ".git")
+}
+
 pub async fn repo_summary(path: PathBuf) -> RepoSummary {
     let name = path
         .file_name()
@@ -68,7 +125,9 @@ pub async fn repo_summary(path: PathBuf) -> RepoSummary {
         has_upstream: false,
         last_commit: None,
         error: None,
+        origin_slug: None,
     };
+    summary.origin_slug = origin_slug(&path).await;
 
     let (status, last_commit) = tokio::join!(
         git(&path, &["status", "--porcelain=v2", "--branch"]),
@@ -326,6 +385,82 @@ mod tests {
         assert!(parse_porcelain_line("M").is_none());
         assert!(parse_porcelain_line("MM ").is_none()); // needs XY + space + path
         assert!(parse_porcelain_line("MM a").is_some());
+    }
+
+    fn unique_temp_dir() -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "breach-git-{}-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn is_git_repo_detects_git_directory() {
+        let dir = unique_temp_dir();
+        std::fs::create_dir(dir.join(".git")).unwrap();
+        assert!(is_git_repo(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_git_repo_detects_git_file_worktree() {
+        let dir = unique_temp_dir();
+        std::fs::write(dir.join(".git"), "gitdir: /tmp/repo/.git/worktrees/wt\n").unwrap();
+        assert!(is_git_repo(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_git_repo_rejects_plain_directory() {
+        let dir = unique_temp_dir();
+        assert!(!is_git_repo(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_git_repo_rejects_internal_worktrees_metadata() {
+        let dir = unique_temp_dir();
+        let meta = dir.join(".git").join("worktrees").join("feature");
+        std::fs::create_dir_all(&meta).unwrap();
+        // Even if someone dropped a `.git` entry inside the metadata dir,
+        // the path itself is Git-internal and must not count as a repo.
+        std::fs::write(meta.join(".git"), "nope").unwrap();
+        assert!(!is_git_repo(&meta));
+        assert!(path_is_inside_git_dir(&meta));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn is_git_repo_rejects_submodule_gitfile() {
+        let dir = unique_temp_dir();
+        std::fs::write(dir.join(".git"), "gitdir: ../.git/modules/vendor-lib\n").unwrap();
+        assert!(!is_git_repo(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn gitdir_points_at_submodule_detects_relative_and_absolute() {
+        assert!(gitdir_points_at_submodule(
+            "gitdir: ../.git/modules/vendor-lib\n"
+        ));
+        assert!(gitdir_points_at_submodule(
+            "gitdir: /Users/me/proj/.git/modules/foo"
+        ));
+        assert!(!gitdir_points_at_submodule(
+            "gitdir: /Users/me/proj/.git/worktrees/wt\n"
+        ));
+        assert!(!gitdir_points_at_submodule(
+            "gitdir: /tmp/repo/.git/worktrees/wt"
+        ));
     }
 
     #[test]
