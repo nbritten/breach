@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use serde::Serialize;
 use tokio::process::Command;
 
@@ -20,16 +18,20 @@ use tokio::process::Command;
 /// match. The two CLIs we ship with today both expose themselves directly.
 const AGENT_PROCESS_NAMES: &[(&str, &str)] = &[("claude", "claude"), ("codex", "codex")];
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct AgentSession {
+    pub id: String,
     pub provider: String,
     pub repo_path: String,
+    pub cwd: String,
+    pub pid: u32,
+    pub state: &'static str,
 }
 
 /// For each known agent CLI, find running processes and report which of
 /// `repo_paths` contains each process's cwd. Returns one entry per
-/// `(provider, repo)` pair — multiple processes for the same provider in
-/// the same repo collapse to a single session entry.
+/// running process. Process identity matters on the Agents page: two agents
+/// working in the same repository are two independently actionable sessions.
 #[tauri::command]
 pub async fn list_active_agent_sessions(
     repo_paths: Vec<String>,
@@ -53,13 +55,20 @@ pub async fn list_active_agent_sessions(
         .map_err(|e| format!("lsof spawn failed: {e}"))?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let detected = parse_lsof_output(&stdout);
-    let mut sessions: HashSet<AgentSession> = HashSet::new();
-    for (provider_id, cwd) in detected {
+    let mut sessions = Vec::new();
+    for (pid, provider_id, cwd) in detected {
         for repo_path in &repo_paths {
             if path_contains(repo_path, cwd) {
-                sessions.insert(AgentSession {
+                sessions.push(AgentSession {
+                    id: format!("{provider_id}-{pid}"),
                     provider: provider_id.to_string(),
                     repo_path: repo_path.clone(),
+                    cwd: cwd.to_string(),
+                    pid,
+                    // Process discovery proves that work is active, but it
+                    // cannot prove that a provider is awaiting human input.
+                    // More specific states are reserved for provider events.
+                    state: "working",
                 });
                 break;
             }
@@ -70,24 +79,27 @@ pub async fn list_active_agent_sessions(
         a.repo_path
             .cmp(&b.repo_path)
             .then_with(|| a.provider.cmp(&b.provider))
+            .then_with(|| a.pid.cmp(&b.pid))
     });
     Ok(sessions)
 }
 
 /// Parse lsof field output. A process record starts with `p`, `c` carries its
 /// command name, and `n` carries the cwd selected by `-d cwd`.
-fn parse_lsof_output(stdout: &str) -> Vec<(&str, &str)> {
+fn parse_lsof_output(stdout: &str) -> Vec<(u32, &str, &str)> {
+    let mut pid = None;
     let mut provider = None;
     let mut detected = Vec::new();
     for line in stdout.lines() {
-        if line.starts_with('p') {
+        if let Some(value) = line.strip_prefix('p') {
+            pid = value.parse().ok();
             provider = None;
         } else if let Some(command) = line.strip_prefix('c') {
             provider = AGENT_PROCESS_NAMES
                 .iter()
                 .find_map(|(id, name)| (*name == command).then_some(*id));
-        } else if let (Some(id), Some(cwd)) = (provider, line.strip_prefix('n')) {
-            detected.push((id, cwd));
+        } else if let (Some(pid), Some(id), Some(cwd)) = (pid, provider, line.strip_prefix('n')) {
+            detected.push((pid, id, cwd));
         }
     }
     detected
@@ -143,8 +155,8 @@ mod tests {
         assert_eq!(
             parse_lsof_output(out),
             vec![
-                ("claude", "/Users/a/repos/foo"),
-                ("codex", "/Users/a/repos/bar"),
+                (101, "claude", "/Users/a/repos/foo"),
+                (202, "codex", "/Users/a/repos/bar"),
             ]
         );
     }
@@ -153,5 +165,18 @@ mod tests {
     fn ignores_prefix_matches_and_incomplete_records() {
         let out = "p1\nccodex-code-mode-host\nfcwd\nn/tmp/host\np2\nccodex\nfcwd\np3\nn/tmp/missing-command\n";
         assert!(parse_lsof_output(out).is_empty());
+    }
+
+    #[test]
+    fn keeps_multiple_processes_in_the_same_repo_distinct() {
+        let out =
+            "p10\nccodex\nfcwd\nn/Users/a/repos/foo\np11\nccodex\nfcwd\nn/Users/a/repos/foo\n";
+        assert_eq!(
+            parse_lsof_output(out),
+            vec![
+                (10, "codex", "/Users/a/repos/foo"),
+                (11, "codex", "/Users/a/repos/foo"),
+            ]
+        );
     }
 }

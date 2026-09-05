@@ -18,13 +18,23 @@ import {
 type BootState = "loading" | "first-launch" | "ready";
 
 const RepoDetail = lazy(() =>
-  import("./pages/RepoDetail").then((module) => ({ default: module.RepoDetail })),
+  import("./pages/RepoDetail").then((module) => ({
+    default: module.RepoDetail,
+  })),
 );
 const Settings = lazy(() =>
   import("./pages/Settings").then((module) => ({ default: module.Settings })),
 );
 const Terminal = lazy(() =>
   import("./pages/Terminal").then((module) => ({ default: module.Terminal })),
+);
+const Agents = lazy(() =>
+  import("./pages/Agents").then((module) => ({ default: module.Agents })),
+);
+const AgentDetail = lazy(() =>
+  import("./pages/AgentDetail").then((module) => ({
+    default: module.AgentDetail,
+  })),
 );
 const Onboarding = lazy(() =>
   import("./components/Onboarding").then((module) => ({
@@ -85,12 +95,16 @@ function AppShell() {
           <Sidebar />
           <div className="flex-1 overflow-hidden">
             <Suspense
-              fallback={<div className="p-6 text-sm text-neutral-500">Loading…</div>}
+              fallback={
+                <div className="p-6 text-sm text-neutral-500">Loading…</div>
+              }
             >
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/repo/:path" element={<RepoDetail />} />
                 <Route path="/terminal" element={<Terminal />} />
+                <Route path="/agents" element={<Agents />} />
+                <Route path="/agents/:id" element={<AgentDetail />} />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
             </Suspense>

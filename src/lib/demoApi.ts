@@ -36,8 +36,10 @@ export const demoApi = {
     return demoRepoSummary(repoPath);
   },
   repoDiff: async (_repoPath: string): Promise<string> => "",
-  repoLog: async (_repoPath: string, _limit?: number): Promise<CommitInfo[]> =>
-    [],
+  repoLog: async (
+    _repoPath: string,
+    _limit?: number,
+  ): Promise<CommitInfo[]> => [],
   commitDiff: async (_repoPath: string, _sha: string): Promise<string> => "",
   repoDirtyFiles: async (_repoPath: string): Promise<DirtyFile[]> => [],
   repoStash: async (_repoPath: string): Promise<void> => {},
@@ -92,10 +94,53 @@ export const demoApi = {
     // during a demo recording so the indicators have a story to tell. The
     // mix shows what multi-agent monitoring will look like at a glance.
     return [
-      { provider: "claude", repo_path: "/Users/demo/repos/northstar-api" },
-      { provider: "claude", repo_path: "/Users/demo/repos/ml-pipeline" },
-      { provider: "codex", repo_path: "/Users/demo/repos/billing-service" },
-      { provider: "codex", repo_path: "/Users/demo/repos/customer-portal" },
+      {
+        id: "claude-101",
+        provider: "claude",
+        repo_path: "/Users/demo/repos/northstar-api",
+        cwd: "/Users/demo/repos/northstar-api",
+        pid: 101,
+        state: "needs_input",
+        title: "Plan the webhook migration",
+        attention_reason: "Which compatibility window should we support?",
+        last_message:
+          "I can preserve both payload versions, but need a cutoff date.",
+        updated_at: Date.now() - 180_000,
+      },
+      {
+        id: "claude-102",
+        provider: "claude",
+        repo_path: "/Users/demo/repos/ml-pipeline",
+        cwd: "/Users/demo/repos/ml-pipeline",
+        pid: 102,
+        state: "working",
+        title: "Reduce training startup time",
+        last_message: "Profiling the data loader and cache warmup.",
+        updated_at: Date.now() - 42_000,
+      },
+      {
+        id: "codex-201",
+        provider: "codex",
+        repo_path: "/Users/demo/repos/billing-service",
+        cwd: "/Users/demo/repos/billing-service",
+        pid: 201,
+        state: "needs_approval",
+        title: "Ship retry handling",
+        attention_reason: "Ready to merge pull request #184",
+        last_message: "All checks passed. May I merge the PR?",
+        updated_at: Date.now() - 65_000,
+      },
+      {
+        id: "codex-202",
+        provider: "codex",
+        repo_path: "/Users/demo/repos/customer-portal",
+        cwd: "/Users/demo/repos/customer-portal",
+        pid: 202,
+        state: "completed",
+        title: "Fix account switcher",
+        last_message: "Completed and opened pull request #92.",
+        updated_at: Date.now() - 600_000,
+      },
     ];
   },
   openInTerminal: async (_repoPath: string, _app: string): Promise<string> =>
