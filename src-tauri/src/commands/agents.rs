@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::io::{BufRead, BufReader, Write};
+use std::process::Stdio;
 use tokio::process::Command;
 
 /// Coding-agent CLIs we look for. Adding a new one is one line: append the
@@ -42,6 +44,23 @@ struct ClaudeSession {
     pid: u32,
     session_id: String,
     started_at: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexThread {
+    id: String,
+    cwd: String,
+    name: Option<String>,
+    preview: String,
+    status: CodexThreadStatus,
+    updated_at: u64,
+}
+
+#[derive(Deserialize)]
+struct CodexThreadStatus {
+    #[serde(rename = "type")]
+    kind: String,
 }
 
 /// For each known agent CLI, find running processes and report which of
@@ -135,6 +154,20 @@ pub async fn list_active_agent_sessions(
             }
         }
     }
+
+    let codex_repos = repo_paths.clone();
+    if let Ok(native_sessions) =
+        tokio::task::spawn_blocking(move || list_codex_threads(&codex_repos)).await
+    {
+        for native in &native_sessions {
+            sessions.retain(|session| {
+                !(session.provider == "codex"
+                    && session.connection == "process"
+                    && session.repo_path == native.repo_path)
+            });
+        }
+        sessions.extend(native_sessions);
+    }
     let mut sessions: Vec<_> = sessions.into_iter().collect();
     sessions.sort_by(|a, b| {
         a.repo_path
@@ -147,6 +180,91 @@ pub async fn list_active_agent_sessions(
 
 fn parse_claude_sessions(stdout: &[u8]) -> Vec<ClaudeSession> {
     serde_json::from_slice(stdout).unwrap_or_default()
+}
+
+fn list_codex_threads(repo_paths: &[String]) -> Vec<AgentSession> {
+    let mut child = match std::process::Command::new("codex")
+        .args(["app-server", "--stdio"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(_) => return Vec::new(),
+    };
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let stdout = child.stdout.take().expect("piped stdout");
+    let mut reader = BufReader::new(stdout);
+
+    let initialize = r#"{"id":1,"method":"initialize","params":{"clientInfo":{"name":"breach","version":"0.6.0"}}}"#;
+    if writeln!(stdin, "{initialize}")
+        .and_then(|_| stdin.flush())
+        .is_err()
+    {
+        return Vec::new();
+    }
+    if read_response(&mut reader, 1).is_none_or(|value| value.get("result").is_none()) {
+        return Vec::new();
+    }
+    let request = r#"{"id":2,"method":"thread/list","params":{"limit":100,"sortKey":"updated_at","sortDirection":"desc","archived":false,"useStateDbOnly":true}}"#;
+    if writeln!(stdin, "{{\"method\":\"initialized\"}}")
+        .and_then(|_| writeln!(stdin, "{request}"))
+        .and_then(|_| stdin.flush())
+        .is_err()
+    {
+        return Vec::new();
+    }
+    let response = read_response(&mut reader, 2).unwrap_or_default();
+    let _ = child.kill();
+    let threads: Vec<CodexThread> = response
+        .pointer("/result/data")
+        .and_then(|data| serde_json::from_value(data.clone()).ok())
+        .unwrap_or_default();
+
+    threads
+        .into_iter()
+        .filter_map(|thread| {
+            let state = match thread.status.kind.as_str() {
+                "active" => "working",
+                "idle" => "idle",
+                "systemError" => "failed",
+                _ => return None,
+            };
+            let repo_path = repo_paths
+                .iter()
+                .find(|repo| path_contains(repo, &thread.cwd))?;
+            let title = thread
+                .name
+                .filter(|name| !name.is_empty())
+                .or_else(|| (!thread.preview.is_empty()).then_some(thread.preview));
+            Some(AgentSession {
+                id: thread.id,
+                provider: "codex".into(),
+                repo_path: repo_path.clone(),
+                cwd: thread.cwd,
+                pid: 0,
+                state,
+                title,
+                updated_at: Some(thread.updated_at.saturating_mul(1000)),
+                connection: "codex",
+            })
+        })
+        .collect()
+}
+
+fn read_response(reader: &mut impl BufRead, expected_id: u64) -> Option<serde_json::Value> {
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if reader.read_line(&mut line).ok()? == 0 {
+            return None;
+        }
+        let value: serde_json::Value = serde_json::from_str(&line).ok()?;
+        if value.get("id").and_then(serde_json::Value::as_u64) == Some(expected_id) {
+            return Some(value);
+        }
+    }
 }
 
 /// Parse lsof field output. A process record starts with `p`, `c` carries its
