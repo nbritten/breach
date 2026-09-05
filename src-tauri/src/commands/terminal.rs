@@ -4,12 +4,17 @@ use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{sync_channel, RecvTimeoutError};
 use std::sync::{Arc, Mutex, Weak};
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 
 const DEFAULT_COLS: u16 = 80;
 const DEFAULT_ROWS: u16 = 24;
 const READ_BUFFER_SIZE: usize = 8 * 1024;
+const OUTPUT_BATCH_SIZE: usize = 64 * 1024;
+const OUTPUT_BATCH_DELAY: Duration = Duration::from_millis(8);
+const OUTPUT_QUEUE_DEPTH: usize = 64;
 const OUTPUT_EVENT: &str = "terminal-output";
 const EXIT_EVENT: &str = "terminal-exit";
 
@@ -167,23 +172,38 @@ pub fn terminal_spawn(
         .map_err(|_| lock_error("session"))?
         .insert(id.clone(), session);
 
-    let output_app = app.clone();
-    let output_id = id.clone();
+    let (output_tx, output_rx) = sync_channel::<Vec<u8>>(OUTPUT_QUEUE_DEPTH);
     let reader_thread = std::thread::spawn(move || {
         let mut buffer = [0_u8; READ_BUFFER_SIZE];
         loop {
             match reader.read(&mut buffer) {
                 Ok(0) | Err(_) => break,
-                Ok(read) => {
-                    let _ = output_app.emit(
-                        OUTPUT_EVENT,
-                        TerminalOutput {
-                            session_id: output_id.clone(),
-                            data: buffer[..read].to_vec(),
-                        },
-                    );
+                Ok(read) if output_tx.send(buffer[..read].to_vec()).is_err() => break,
+                Ok(_) => {}
+            }
+        }
+    });
+
+    let output_app = app.clone();
+    let output_id = id.clone();
+    let output_thread = std::thread::spawn(move || {
+        while let Ok(first) = output_rx.recv() {
+            let mut batch = first;
+            let deadline = Instant::now() + OUTPUT_BATCH_DELAY;
+            while batch.len() < OUTPUT_BATCH_SIZE {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                match output_rx.recv_timeout(remaining) {
+                    Ok(next) => batch.extend_from_slice(&next),
+                    Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => break,
                 }
             }
+            let _ = output_app.emit(
+                OUTPUT_EVENT,
+                TerminalOutput {
+                    session_id: output_id.clone(),
+                    data: batch,
+                },
+            );
         }
     });
 
@@ -192,6 +212,7 @@ pub fn terminal_spawn(
     std::thread::spawn(move || {
         let status = child.wait();
         let _ = reader_thread.join();
+        let _ = output_thread.join();
         if let Some(sessions) = sessions.upgrade() {
             if let Ok(mut sessions) = sessions.lock() {
                 sessions.remove(&id);
