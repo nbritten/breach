@@ -135,6 +135,11 @@ const NESTED_SCAN_SKIP: &[&str] = &[
 ];
 
 async fn scan_git_repos_nested(root: &Path) -> Result<Vec<PathBuf>, String> {
+    let canonical_root = match fs::canonicalize(root).await {
+        Ok(path) => path,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(format!("cannot resolve {}: {e}", root.display())),
+    };
     let mut candidates = Vec::new();
     if git::is_git_repo(root) {
         candidates.push(root.to_path_buf());
@@ -142,9 +147,7 @@ async fn scan_git_repos_nested(root: &Path) -> Result<Vec<PathBuf>, String> {
 
     let mut visited: HashSet<PathBuf> = HashSet::new();
     visited.insert(root.to_path_buf());
-    if let Ok(canon) = fs::canonicalize(root).await {
-        visited.insert(canon);
-    }
+    visited.insert(canonical_root.clone());
 
     let mut stack = vec![(root.to_path_buf(), 0usize)];
     while let Some((dir, depth)) = stack.pop() {
@@ -178,6 +181,17 @@ async fn scan_git_repos_nested(root: &Path) -> Result<Vec<PathBuf>, String> {
             if !meta.is_dir() {
                 continue;
             }
+            // Following symlinks is useful for repo aliases, but recursive
+            // discovery must never escape the directory the user selected.
+            // Fail closed if a child cannot be resolved or resolves elsewhere.
+            let Ok(canonical_path) = fs::canonicalize(&path).await else {
+                continue;
+            };
+            if canonical_path != canonical_root
+                && canonical_path.strip_prefix(&canonical_root).is_err()
+            {
+                continue;
+            }
             let child_depth = depth + 1;
             if child_depth > NESTED_SCAN_MAX_DEPTH {
                 continue;
@@ -197,10 +211,8 @@ async fn scan_git_repos_nested(root: &Path) -> Result<Vec<PathBuf>, String> {
             if !visited.insert(path.clone()) {
                 continue;
             }
-            if let Ok(canon) = fs::canonicalize(&path).await {
-                if !visited.insert(canon) {
-                    continue;
-                }
+            if !visited.insert(canonical_path) {
+                continue;
             }
             stack.push((path, child_depth));
         }
@@ -479,6 +491,24 @@ mod tests {
             "symlink-to-dir should be listed like the shallow scan: {rels:?}"
         );
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[tokio::test]
+    async fn scan_nested_does_not_follow_symlink_outside_root() {
+        let tmp = unique_temp_dir();
+        let root = tmp.join("root");
+        let outside = tmp.join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(outside.join("secret-repo/.git")).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("escape")).unwrap();
+
+        let found = scan_git_repos(&root, true).await.unwrap();
+
+        assert!(
+            found.is_empty(),
+            "outside repositories leaked into scan: {found:?}"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[tokio::test]
