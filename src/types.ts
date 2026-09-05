@@ -56,9 +56,26 @@ export interface DirtyFile {
 
 export type AgentProvider = "claude" | "codex";
 
+export type AgentState =
+  | "needs_input"
+  | "needs_approval"
+  | "failed"
+  | "working"
+  | "finishing"
+  | "completed"
+  | "idle";
+
 export interface AgentSession {
+  id: string;
   provider: AgentProvider;
   repo_path: string;
+  cwd: string;
+  pid: number;
+  state: AgentState;
+  title?: string;
+  attention_reason?: string;
+  last_message?: string;
+  updated_at?: number;
 }
 
 export interface RepoSummary {
