@@ -1,45 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { AgentCard } from "../components/AgentCard";
 import { EmptyState } from "../components/EmptyState";
 import { agentNeedsAttention, sortAgentSessions } from "../lib/agents";
-import { api } from "../lib/api";
-import { errorText } from "../lib/errors";
-import { useActiveAgentSessionsPoll } from "../lib/hooks";
-import { getReposPath } from "../lib/settings";
-import type { AgentSession, RepoSummary } from "../types";
+import { useAgentSessions } from "../lib/agentSessions";
 
 export function Agents() {
-  const [repos, setRepos] = useState<RepoSummary[]>([]);
-  const [sessions, setSessions] = useState<AgentSession[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      const path = await getReposPath();
-      const nextRepos = await api.listRepos(path);
-      const nextSessions = await api.listActiveAgentSessions(
-        nextRepos.map((repo) => repo.path),
-      );
-      setRepos(nextRepos);
-      setSessions(nextSessions);
-      setError(null);
-    } catch (cause) {
-      setError(errorText(cause));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-  useActiveAgentSessionsPoll(
-    repos.length > 0,
-    5_000,
-    () => repos.map((repo) => repo.path),
-    setSessions,
-  );
+  const { sessions, loading, error, refresh } = useAgentSessions();
 
   const groups = useMemo(() => {
     const sorted = sortAgentSessions(sessions);
