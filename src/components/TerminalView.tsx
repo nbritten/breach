@@ -7,9 +7,9 @@ import { errorText } from "../lib/errors";
 
 const encoder = new TextEncoder();
 
-export function TerminalView() {
+export function TerminalView({ sessionId }: { sessionId: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { start, subscribe, write, resize } = useTerminalSession();
+  const { subscribe, write, resize } = useTerminalSession();
 
   useEffect(() => {
     const container = containerRef.current;
@@ -55,46 +55,33 @@ export function TerminalView() {
 
     let cancelled = false;
     let unsubscribeOutput: (() => void) | null = null;
-    let activeSessionId: string | null = null;
     const disposables = [
       terminal.onData((data) => {
-        if (activeSessionId) {
-          write(activeSessionId, encoder.encode(data)).catch(() => {});
-        }
+        write(sessionId, encoder.encode(data)).catch(() => {});
       }),
       terminal.onBinary((data) => {
-        if (!activeSessionId) return;
         const bytes = Uint8Array.from(data, (char) => char.charCodeAt(0));
-        write(activeSessionId, bytes).catch(() => {});
+        write(sessionId, bytes).catch(() => {});
       }),
     ];
 
     const fit = () => {
       fitAddon.fit();
-      if (activeSessionId) {
-        resize(activeSessionId, terminal.cols, terminal.rows).catch(() => {});
-      }
+      resize(sessionId, terminal.cols, terminal.rows).catch(() => {});
     };
 
     let frame = window.requestAnimationFrame(() => {
       fit();
       terminal.focus();
-      start(terminal.cols, terminal.rows)
-        .then((session) => {
-          if (cancelled) return;
-          activeSessionId = session.id;
-          unsubscribeOutput = subscribe(session.id, (data) =>
-            terminal.write(data),
+      try {
+        unsubscribeOutput = subscribe(sessionId, (data) => terminal.write(data));
+      } catch (error) {
+        if (!cancelled) {
+          terminal.writeln(
+            `\r\n\x1b[31mCould not attach terminal: ${errorText(error)}\x1b[0m`,
           );
-          return resize(session.id, terminal.cols, terminal.rows);
-        })
-        .catch((error) => {
-          if (!cancelled) {
-            terminal.writeln(
-              `\r\n\x1b[31mCould not start terminal: ${errorText(error)}\x1b[0m`,
-            );
-          }
-        });
+        }
+      }
     });
 
     const resizeObserver = new ResizeObserver(() => {
