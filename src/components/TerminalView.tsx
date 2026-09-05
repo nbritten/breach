@@ -1,6 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon } from "@xterm/addon-search";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
 import { useTerminalSession } from "../lib/terminalSession";
 import { errorText } from "../lib/errors";
@@ -9,7 +12,28 @@ const encoder = new TextEncoder();
 
 export function TerminalView({ sessionId }: { sessionId: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const terminalRef = useRef<Terminal | null>(null);
+  const searchAddonRef = useRef<SearchAddon | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const { subscribe, write, resize } = useTerminalSession();
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setSearchOpen(true);
+        window.requestAnimationFrame(() => searchInputRef.current?.select());
+      } else if (event.key === "Escape" && searchOpen) {
+        event.preventDefault();
+        setSearchOpen(false);
+        terminalRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [searchOpen]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -50,8 +74,19 @@ export function TerminalView({ sessionId }: { sessionId: string }) {
       },
     });
     const fitAddon = new FitAddon();
+    const searchAddon = new SearchAddon();
     terminal.loadAddon(fitAddon);
+    terminal.loadAddon(searchAddon);
+    terminal.loadAddon(
+      new WebLinksAddon((_event, uri) => {
+        openUrl(uri).catch((error) =>
+          console.warn("open terminal link failed", error),
+        );
+      }),
+    );
     terminal.open(container);
+    terminalRef.current = terminal;
+    searchAddonRef.current = searchAddon;
 
     let cancelled = false;
     let unsubscribeOutput: (() => void) | null = null;
@@ -103,14 +138,75 @@ export function TerminalView({ sessionId }: { sessionId: string }) {
       resizeObserver.disconnect();
       window.cancelAnimationFrame(frame);
       terminal.dispose();
+      terminalRef.current = null;
+      searchAddonRef.current = null;
     };
   }, []);
 
+  const find = (previous = false) => {
+    if (!searchQuery) return;
+    if (previous) searchAddonRef.current?.findPrevious(searchQuery);
+    else searchAddonRef.current?.findNext(searchQuery);
+  };
+
   return (
-    <div
-      ref={containerRef}
-      aria-label="Terminal"
-      className="h-full w-full bg-neutral-950 px-4 py-3"
-    />
+    <div className="relative h-full w-full bg-neutral-950">
+      <div
+        ref={containerRef}
+        aria-label="Terminal"
+        className="h-full w-full bg-neutral-950 px-4 py-3"
+      />
+      {searchOpen && (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            find(false);
+          }}
+          className="absolute top-2 right-4 flex items-center gap-1 rounded-md border border-neutral-700 bg-neutral-900 p-1 shadow-xl"
+        >
+          <input
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={(event) => {
+              const query = event.currentTarget.value;
+              setSearchQuery(query);
+              if (query) {
+                searchAddonRef.current?.findNext(query, { incremental: true });
+              }
+            }}
+            placeholder="Find"
+            aria-label="Find in terminal"
+            className="w-48 bg-transparent px-2 py-1 text-xs outline-none placeholder:text-neutral-600"
+          />
+          <button
+            type="button"
+            onClick={() => find(true)}
+            title="Previous match"
+            className="w-7 h-7 rounded text-neutral-400 hover:bg-neutral-800 hover:text-neutral-100"
+          >
+            ↑
+          </button>
+          <button
+            type="submit"
+            title="Next match"
+            className="w-7 h-7 rounded text-neutral-400 hover:bg-neutral-800 hover:text-neutral-100"
+          >
+            ↓
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchOpen(false);
+              terminalRef.current?.focus();
+            }}
+            title="Close search"
+            aria-label="Close search"
+            className="w-7 h-7 rounded text-neutral-400 hover:bg-neutral-800 hover:text-neutral-100"
+          >
+            ×
+          </button>
+        </form>
+      )}
+    </div>
   );
 }
