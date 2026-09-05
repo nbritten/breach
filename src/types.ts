@@ -76,6 +76,7 @@ export interface AgentSession {
   attention_reason?: string;
   last_message?: string;
   updated_at?: number;
+  connection?: "process" | "claude" | "codex";
 }
 
 export interface RepoSummary {
