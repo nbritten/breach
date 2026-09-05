@@ -6,6 +6,7 @@ import { Sidebar } from "./components/Sidebar";
 import { SearchProvider } from "./lib/search";
 import { OnboardingProvider, useOnboarding } from "./lib/onboarding";
 import { ToastProvider } from "./lib/toast";
+import { TerminalSessionProvider } from "./lib/terminalSession";
 import {
   getOnboarded,
   getPinnedRepos,
@@ -114,7 +115,9 @@ export default function App() {
     <ToastProvider>
       <SearchProvider>
         <OnboardingProvider>
-          <AppShell />
+          <TerminalSessionProvider>
+            <AppShell />
+          </TerminalSessionProvider>
         </OnboardingProvider>
       </SearchProvider>
     </ToastProvider>
