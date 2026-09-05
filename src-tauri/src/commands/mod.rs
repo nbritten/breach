@@ -2,9 +2,10 @@ pub mod agents;
 pub mod gh;
 pub mod notifications;
 pub mod repos;
-pub mod watcher;
 pub mod shell;
 pub mod sync;
+pub mod terminal;
+pub mod watcher;
 
 use futures::stream::{self, StreamExt};
 use std::path::{Path, PathBuf};
