@@ -1,3 +1,4 @@
+import { loadTheme } from "./lib/themeState";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
@@ -11,6 +12,7 @@ import { getDemoMode } from "./lib/settings";
 // a broken store doesn't strand the app on a blank screen — it just lands
 // in normal (non-demo) mode, which is the safer default.
 async function boot() {
+  await loadTheme();
   try {
     setDemoModeActive(await getDemoMode());
   } catch (e) {

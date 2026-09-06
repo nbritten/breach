@@ -1,3 +1,4 @@
+import { resolveTheme, type ThemeId } from "./themes";
 import { LazyStore } from "@tauri-apps/plugin-store";
 import { api, isDemoModeActive } from "./api";
 import { getDemoPinnedRepos, setDemoPinnedRepos } from "./demoFixtures";
@@ -267,4 +268,19 @@ async function expandStoredPathKeys(
     out[await expandStoredPath(k)] = v;
   }
   return out;
+}
+
+export async function getTheme(): Promise<ThemeId> {
+  return resolveTheme(await store.get<unknown>("theme"));
+}
+
+export async function setTheme(theme: ThemeId): Promise<void> {
+  const previous = await store.get<unknown>("theme");
+  await store.set("theme", theme);
+  try {
+    await store.save();
+  } catch (error) {
+    await store.set("theme", resolveTheme(previous));
+    throw error;
+  }
 }
