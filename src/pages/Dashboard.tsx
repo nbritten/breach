@@ -1,3 +1,4 @@
+import { usePinnedRepos } from "../lib/usePinnedRepos";
 import { TerminalLaunchButton } from "../components/TerminalLaunchButton";
 import { RefreshButton } from "../components/RefreshButton";
 import { Button } from "../components/Button";
@@ -15,14 +16,12 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   buildServiceUrl,
-  getEffectivePinnedRepos,
   getRepoOrgs,
   getReposPath,
   getScanNestedRepos,
   getGroupNestedRepos,
   getServiceRepos,
   getServiceUrlTemplate,
-  setEffectivePinnedRepos,
 } from "../lib/settings";
 import { useSearch } from "../lib/search";
 import { errorText } from "../lib/errors";
@@ -55,7 +54,6 @@ import {
   repoPinKey,
   repoPathLabel,
   sortRepos,
-  togglePinnedOrder,
   REPO_FILTER_ORDER,
   repoFilterLabel,
   repoFilterCounts,
@@ -84,7 +82,7 @@ export function Dashboard() {
   const [groupNested, setGroupNested] = useState(true);
   const [showSyncAll, setShowSyncAll] = useState(false);
   const [showClone, setShowClone] = useState(false);
-  const [pinnedOrder, setPinnedOrder] = useState<string[]>([]);
+  const { pinnedOrder, refreshPins, togglePin } = usePinnedRepos(repos);
   const [orgs, setOrgs] = useState<string[]>([]);
   const [prs, setPrs] = useState<MyPrs>({ authored: {}, review_requested: {}, errors: {} });
   const [ciByPath, setCiByPath] = useState<Record<string, CiStatus>>({});
@@ -110,20 +108,6 @@ export function Dashboard() {
       navigate("/terminal");
     },
     [navigate, openEmbeddedTerminal],
-  );
-
-  const togglePin = useCallback(
-    async (key: string) => {
-      const repo = repos.find((r) => r.path === key || r.name === key);
-      if (!repo) return;
-      const next = togglePinnedOrder(repo, repos, pinnedOrder);
-      setPinnedOrder(next);
-      // setEffectivePinnedRepos routes to either the real settings store or
-      // demo mode's in-memory store, so pinning during a demo session updates
-      // the dashboard without leaking demo names into real pinnedRepos.
-      await setEffectivePinnedRepos(next);
-    },
-    [pinnedOrder, repos],
   );
 
   const refreshPrs = useCallback((forOrgs: string[]) => {
@@ -152,7 +136,7 @@ export function Dashboard() {
       // The settings reads don't depend on the repos path — kick them off
       // first so only listRepos has to wait for the path lookup.
       const settingsReads = Promise.all([
-        getEffectivePinnedRepos(),
+        refreshPins(),
         getRepoOrgs(),
         getServiceUrlTemplate(),
         getServiceRepos(),
@@ -168,12 +152,11 @@ export function Dashboard() {
       setPath(path);
       setScanNested(nested);
       setGroupNested(group);
-      const [list, [pinned, nextOrgs, tpl, services]] = await Promise.all([
+      const [list, [, nextOrgs, tpl, services]] = await Promise.all([
         api.listRepos(path, nested),
         settingsReads,
       ]);
       setRepos(list);
-      setPinnedOrder(pinned);
       setOrgs(nextOrgs);
       setServiceTpl(tpl);
       setServiceSet(new Set(services));
@@ -200,7 +183,7 @@ export function Dashboard() {
       lastRefreshAt.current = Date.now();
       setLoading(false);
     }
-  }, [refreshPrs]);
+  }, [refreshPrs, refreshPins]);
 
   usePrNotificationsPoll(orgs.length > 0, 30_000, () => refreshPrs(orgs));
 
