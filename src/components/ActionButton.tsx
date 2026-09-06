@@ -7,6 +7,7 @@ import { useToast } from "../lib/toast";
 interface Props {
   action: () => Promise<unknown>;
   label: string;
+  displayLabel?: string;
   pendingLabel: string;
   successLabel: string;
   icon: IconName;
@@ -17,7 +18,7 @@ interface Props {
   className?: string;
 }
 
-export function ActionButton({ action, label, pendingLabel, successLabel, icon, description, iconOnly = false, disabled = false, busy = false, className = "" }: Props) {
+export function ActionButton({ action, label, displayLabel, pendingLabel, successLabel, icon, description, iconOnly = false, disabled = false, busy = false, className = "" }: Props) {
   const { showError } = useToast();
   const { state, run } = useActionFeedback(action, showError);
   const pending = busy || state === "pending";
@@ -36,7 +37,7 @@ export function ActionButton({ action, label, pendingLabel, successLabel, icon, 
         onClick={() => void run()}
       >
         <Icon name={pending ? "refresh" : state === "success" ? "check" : state === "error" ? "info" : icon} className={pending ? "animate-spin" : ""} />
-        {!iconOnly && <span>{label}</span>}
+        {!iconOnly && <span>{displayLabel ?? label}</span>}
       </Button>
       <span className="sr-only" role="status">{feedback}</span>
     </Tooltip>

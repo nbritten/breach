@@ -1,3 +1,4 @@
+import { TerminalLaunchButton } from "../components/TerminalLaunchButton";
 import { RefreshButton } from "../components/RefreshButton";
 import { Button } from "../components/Button";
 import {
@@ -21,11 +22,9 @@ import {
   getGroupNestedRepos,
   getServiceRepos,
   getServiceUrlTemplate,
-  openTerminal,
   setEffectivePinnedRepos,
 } from "../lib/settings";
 import { useSearch } from "../lib/search";
-import { useToast } from "../lib/toast";
 import { errorText } from "../lib/errors";
 import {
   useActiveAgentSessionsPoll,
@@ -96,7 +95,6 @@ export function Dashboard() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [serviceTpl, setServiceTpl] = useState("");
   const [serviceSet, setServiceSet] = useState<Set<string>>(new Set());
-  const { showError } = useToast();
   const terminalPaths = useMemo(
     () =>
       new Set(
@@ -397,40 +395,8 @@ export function Dashboard() {
               {repos.length} repositories · {dirtyCount} changed
             </span>
           )}
-          <Tooltip content="Open your repos directory in Breach Terminal.">
-            <Button
-              onClick={() =>
-                reposPath && openBreachTerminal(reposPath).catch(showError)
-              }
-              disabled={!reposPath}
-              variant="secondary"
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="4 17 10 11 4 5" />
-                <line x1="12" y1="19" x2="20" y2="19" />
-              </svg>
-              Terminal
-            </Button>
-          </Tooltip>
-          <Tooltip content="Open your repos directory in your configured external terminal app.">
-            <Button
-              onClick={() => reposPath && openTerminal(reposPath).catch(showError)}
-              disabled={!reposPath}
-              aria-label="Open in external terminal"
-              variant="ghost" iconOnly
-            >
-              ↗
-            </Button>
-          </Tooltip>
+          <TerminalLaunchButton path={reposPath} onOpen={openBreachTerminal} />
+          <TerminalLaunchButton path={reposPath} external iconOnly />
           <Tooltip content="Lists every non-archived repo in your configured GitHub accounts (orgs or users) that isn't local yet, then lets you pick which ones to clone.">
             <Button
               onClick={() => setShowClone(true)}
