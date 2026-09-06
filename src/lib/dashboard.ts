@@ -191,16 +191,7 @@ export function repoPathLabel(
   repo: RepoSummary,
   repos: readonly RepoSummary[],
 ): string | null {
-  if (!namesClash(repo, repos)) return null;
-  const parts = pathParts(repo.path);
-  for (let n = 2; n <= parts.length; n++) {
-    const label = parts.slice(-n).join("/");
-    const clash = repos.some(
-      (r) => r.path !== repo.path && pathTail(r.path, n) === label,
-    );
-    if (!clash) return label;
-  }
-  return repo.path.replace(/\\/g, "/");
+  return pathLabelsFor(repos).get(repo.path) ?? null;
 }
 
 function pathParts(path: string): string[] {
@@ -211,11 +202,83 @@ function pathTail(path: string, n: number): string {
   return pathParts(path).slice(-n).join("/");
 }
 
+/**
+ * `repos` is re-rendered as a stack of per-card lookups (pin state, pin key,
+ * path label) on every dashboard render, and each of those used to rescan the
+ * *entire* repo list per card — O(n) work times n cards. A dashboard is
+ * exactly the place with many repos, so that's a quadratic hot path on every
+ * poll/refresh. These caches key off the `repos` array reference (stable
+ * across a render pass, since it only changes when the underlying state
+ * does) so the expensive part runs once per repos change, not once per card.
+ */
+const clashingNamesCache = new WeakMap<readonly RepoSummary[], Set<string>>();
+
+function clashingNames(repos: readonly RepoSummary[]): Set<string> {
+  let cached = clashingNamesCache.get(repos);
+  if (!cached) {
+    const counts = new Map<string, number>();
+    for (const r of repos) counts.set(r.name, (counts.get(r.name) ?? 0) + 1);
+    cached = new Set(
+      [...counts].filter(([, count]) => count > 1).map(([name]) => name),
+    );
+    clashingNamesCache.set(repos, cached);
+  }
+  return cached;
+}
+
 function namesClash(
   repo: RepoSummary,
   repos: readonly RepoSummary[],
 ): boolean {
-  return repos.some((r) => r.name === repo.name && r.path !== repo.path);
+  return clashingNames(repos).has(repo.name);
+}
+
+const pathLabelCache = new WeakMap<
+  readonly RepoSummary[],
+  Map<string, string | null>
+>();
+
+/**
+ * Path labels only ever need to disambiguate repos that already share a
+ * basename, so this groups by name (small groups, typically 2-3) instead of
+ * comparing each repo against the full list.
+ */
+function pathLabelsFor(
+  repos: readonly RepoSummary[],
+): Map<string, string | null> {
+  let cached = pathLabelCache.get(repos);
+  if (cached) return cached;
+
+  const labels = new Map<string, string | null>();
+  const byName = new Map<string, RepoSummary[]>();
+  for (const r of repos) {
+    const group = byName.get(r.name);
+    if (group) group.push(r);
+    else byName.set(r.name, [r]);
+  }
+  for (const group of byName.values()) {
+    if (group.length < 2) {
+      labels.set(group[0].path, null);
+      continue;
+    }
+    for (const repo of group) {
+      const parts = pathParts(repo.path);
+      let label: string | null = null;
+      for (let n = 2; n <= parts.length; n++) {
+        const candidate = parts.slice(-n).join("/");
+        const clash = group.some(
+          (r) => r.path !== repo.path && pathTail(r.path, n) === candidate,
+        );
+        if (!clash) {
+          label = candidate;
+          break;
+        }
+      }
+      labels.set(repo.path, label ?? repo.path.replace(/\\/g, "/"));
+    }
+  }
+  pathLabelCache.set(repos, labels);
+  return labels;
 }
 
 /**
