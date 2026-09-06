@@ -3,10 +3,10 @@ import { agentNeedsAttention } from "../lib/agents";
 import { useAgentSessions } from "../lib/agentSessions";
 
 const itemBase =
-  "flex items-center justify-center w-10 h-10 rounded-lg transition-colors";
-const active = "bg-neutral-800 text-neutral-100";
+  "nav-item";
+const active = "is-active";
 const inactive =
-  "text-neutral-500 hover:text-neutral-100 hover:bg-neutral-800/60";
+  "";
 
 function GitIcon() {
   return (
@@ -109,8 +109,9 @@ export function Sidebar() {
   return (
     <nav
       aria-label="Workspaces"
-      className="shrink-0 w-16 h-full border-r border-neutral-800 bg-neutral-950 flex flex-col items-center py-3 gap-2"
+      className="sidebar"
     >
+      <div className="nav-caption">Workspace</div>
       <Link
         to="/"
         title="Git"
@@ -119,6 +120,7 @@ export function Sidebar() {
         className={`${itemBase} ${isGit ? active : inactive}`}
       >
         <GitIcon />
+        <span className="nav-label">Repositories</span>
       </Link>
       <Link
         to="/terminal"
@@ -128,6 +130,7 @@ export function Sidebar() {
         className={`${itemBase} ${isTerminal ? active : inactive}`}
       >
         <TerminalIcon />
+        <span className="nav-label">Terminal</span>
       </Link>
       <Link
         to="/agents"
@@ -139,8 +142,9 @@ export function Sidebar() {
         className={`${itemBase} relative ${isAgents ? active : inactive}`}
       >
         <AgentsIcon />
+        <span className="nav-label">Agents</span>
         {attentionCount > 0 && (
-          <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-amber-400 px-1 text-center text-[10px] font-semibold leading-4 text-neutral-950">
+          <span className="nav-attention min-w-4 rounded-full bg-amber-400 px-1 text-center text-[10px] font-semibold leading-4 text-neutral-950">
             {attentionCount > 9 ? "9+" : attentionCount}
           </span>
         )}
@@ -155,6 +159,7 @@ export function Sidebar() {
         className={`${itemBase} ${isSettings ? active : inactive}`}
       >
         <SettingsIcon />
+        <span className="nav-label">Settings</span>
       </button>
     </nav>
   );

@@ -55,7 +55,7 @@ export function TopBar() {
           .catch((e) => console.warn("toggleMaximize failed", e))
       }
       style={drag}
-      className="shrink-0 h-16 flex items-center pr-3 pl-[88px] bg-[#0d1024] text-white select-none border-b border-white/5"
+      className="titlebar shrink-0 h-14 flex items-center pr-5 pl-[88px] select-none"
     >
       <Link
         to="/"
@@ -68,7 +68,7 @@ export function TopBar() {
         <img
           src={logo}
           alt=""
-          className="w-9 h-9 rounded shrink-0"
+          className="w-7 h-7 rounded shrink-0 opacity-85"
           style={{ imageRendering: "pixelated" }}
           draggable={false}
         />
@@ -94,7 +94,7 @@ export function TopBar() {
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/70 pointer-events-none"
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none"
           >
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />
@@ -104,10 +104,11 @@ export function TopBar() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.currentTarget.value)}
-            placeholder="Search"
-            className="w-64 h-8 pl-8 pr-12 rounded-md bg-white/10 placeholder-white/60 text-sm focus:outline-none focus:bg-white/20 focus:ring-2 focus:ring-white/40"
+            placeholder="Search repositories…"
+            aria-label="Search repositories"
+            className="search-field w-64 h-8 pl-8 pr-12 text-xs"
           />
-          <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-mono bg-white/15 text-white/80 rounded px-1.5 py-0.5 border border-white/20 pointer-events-none">
+          <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-mono bg-white/5 text-neutral-400 rounded px-1.5 py-0.5 border border-white/10 pointer-events-none">
             ⌘K
           </kbd>
         </div>
