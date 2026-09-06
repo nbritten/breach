@@ -1,8 +1,9 @@
 import type { SVGProps } from "react";
 
-export type IconName = "refresh" | "check" | "close" | "terminal" | "external" | "pin" | "plus" | "download" | "info" | "filter" | "chevron";
+export type IconName = "back" | "refresh" | "check" | "close" | "terminal" | "external" | "pin" | "plus" | "download" | "info" | "filter" | "chevron";
 
 const paths: Record<IconName, string> = {
+  back: "M19 12H5m7-7-7 7 7 7",
   refresh: "M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 19.5 10M4.5 14a8 8 0 0 0 13.4 3.9",
   check: "m5 12 4 4L19 6",
   close: "m6 6 12 12M18 6 6 18",

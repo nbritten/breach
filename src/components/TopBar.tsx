@@ -1,3 +1,4 @@
+import { BackButton } from "./BackButton";
 import { useEffect, useRef, type CSSProperties } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -49,14 +50,17 @@ export function TopBar() {
     <header
       data-tauri-drag-region
       onMouseDown={startDrag}
-      onDoubleClick={() =>
-        getCurrentWindow()
-          .toggleMaximize()
-          .catch((e) => console.warn("toggleMaximize failed", e))
-      }
+      onDoubleClick={async (event) => {
+        if ((event.target as HTMLElement).closest("input, button, a, kbd, [data-no-drag]")) return;
+        try { await getCurrentWindow().toggleMaximize(); }
+        catch (error) { console.warn("toggleMaximize failed", error); }
+      }}
       style={drag}
       className="titlebar shrink-0 h-14 flex items-center pr-5 pl-[88px] select-none"
     >
+      <div data-no-drag style={noDrag} className="mr-3 flex items-center border-r border-neutral-800 pr-3">
+        <BackButton />
+      </div>
       <Link
         to="/"
         data-no-drag
