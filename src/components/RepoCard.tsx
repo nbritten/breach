@@ -1,3 +1,4 @@
+import { CiStatusIndicator } from "./CiStatusIndicator";
 import { PinButton } from "./PinButton";
 import { RefreshButton } from "./RefreshButton";
 import { memo, type MouseEvent } from "react";
@@ -40,16 +41,6 @@ interface Props {
   onOpenTerminal?: (path: string) => Promise<void>;
 }
 
-const CI_DOT: Record<
-  CiStatus["state"],
-  { color: string; label: string; pulse?: boolean }
-> = {
-  success: { color: "bg-emerald-400", label: "CI passing" },
-  failure: { color: "bg-rose-500", label: "CI failing" },
-  in_progress: { color: "bg-sky-400", label: "CI running", pulse: true },
-  other: { color: "bg-neutral-500", label: "CI" },
-};
-
 function prTooltip(prs: PrInfo[]): string {
   return prs
     .map((p) => `#${p.number} ${p.title}${p.is_draft ? " (draft)" : ""}`)
@@ -87,22 +78,6 @@ export const RepoCard = memo(function RepoCard({
     >
       <div className="repo-card-heading flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          {ci && (
-            <button
-              onClick={(e: MouseEvent) => {
-                e.preventDefault();
-                e.stopPropagation();
-                if (ci.url) openUrl(ci.url).catch(showError);
-              }}
-              title={`${CI_DOT[ci.state].label}${
-                ci.workflow ? ` · ${ci.workflow}` : ""
-              }`}
-              aria-label={CI_DOT[ci.state].label}
-              className={`relative w-2 h-2 rounded-full shrink-0 before:content-[''] before:absolute before:-inset-2 ${
-                CI_DOT[ci.state].color
-              } ${CI_DOT[ci.state].pulse ? "animate-pulse" : ""}`}
-            />
-          )}
           {activeAgents &&
             AGENT_PROVIDER_ORDER.filter((p) => activeAgents.has(p)).map(
               (provider) => {
@@ -169,6 +144,7 @@ export const RepoCard = memo(function RepoCard({
         {!repo.has_upstream && (
           <span className="text-xs text-neutral-500">no upstream</span>
         )}
+        {ci && <CiStatusIndicator ci={ci} />}
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
           {authoredPrs.length > 0 && (
             <button

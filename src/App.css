@@ -336,3 +336,15 @@ html, body, #root { height: 100%; }
   .update-panel { position: absolute; left: 0; top: calc(100% + 10px); z-index: 100; width: 300px; max-width: calc(100vw - 32px); padding: 18px; border: 1px solid #424954; border-radius: 12px; background: #1e2228; box-shadow: 0 16px 48px #00000060; outline: none; }
   .update-progress { width: 100%; height: 4px; margin-top: 8px; border: 0; border-radius: 4px; accent-color: #bac8e8; }
 }
+
+@layer components {
+  .ci-status { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 3px 7px; border: 1px solid transparent; border-radius: 6px; color: var(--color-neutral-400); font-size: 10px; line-height: 18px; white-space: nowrap; }
+  .ci-success > svg:first-child { color: #a9cebb; }
+  .ci-failure { color: #edb1b1; background: #edb1b10b; }
+  .ci-running > svg:first-child { color: #b5c9ed; }
+  button.ci-status:hover { background: #ffffff08; border-color: #ffffff0d; }
+  .ci-external { opacity: 0.5; }
+  button.ci-status:hover .ci-external { opacity: 1; }
+  .ci-status[aria-busy="true"] { cursor: wait; opacity: 0.7; }
+  .repo-card-footer { flex-wrap: wrap; }
+}
