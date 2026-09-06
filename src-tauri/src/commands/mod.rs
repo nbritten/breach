@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod gh;
+pub mod github_workspace;
 pub mod notifications;
 pub mod repos;
 pub mod shell;

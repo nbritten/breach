@@ -2,7 +2,8 @@ import { CiStatusIndicator } from "./CiStatusIndicator";
 import { PinButton } from "./PinButton";
 import { RefreshButton } from "./RefreshButton";
 import { memo, type MouseEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { parsePullUrl } from "../lib/github";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { TerminalLaunchButton } from "./TerminalLaunchButton";
 import { useToast } from "../lib/toast";
@@ -62,6 +63,7 @@ export const RepoCard = memo(function RepoCard({
   terminalActive = false,
   onOpenTerminal,
 }: Props) {
+  const navigate = useNavigate();
   const slug = encodeURIComponent(repo.path);
   const { showError } = useToast();
 
@@ -69,7 +71,9 @@ export const RepoCard = memo(function RepoCard({
     e.preventDefault();
     e.stopPropagation();
     if (prs.length === 0) return;
-    openUrl(prs[0].url).catch(showError);
+    const route = parsePullUrl(prs[0].url);
+    if (route) navigate(route);
+    else openUrl(prs[0].url).catch(showError);
   };
 
   return (

@@ -376,3 +376,74 @@ html, body, #root { height: 100%; }
 }
 @media (min-width: 800px) { .theme-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 480px) { .theme-grid { grid-template-columns: 1fr; } }
+
+@layer components {
+  .gh-workspace { padding: 24px 28px 32px; }
+  .gh-link { color: var(--accent); border-radius: 3px; }
+  .gh-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .gh-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 32px; border: 1px solid var(--line); border-radius: 10px; color: var(--color-neutral-400); font-size: 13px; }
+  .gh-empty h2 { font-size: 15px; font-weight: 500; color: var(--color-neutral-100); }
+  .gh-empty p { max-width: 620px; line-height: 1.7; }
+  .gh-pr-list { border: 1px solid var(--line); border-radius: 11px; overflow: hidden; }
+  .gh-pr-row { display: flex; align-items: center; gap: 14px; padding: 18px; background: var(--color-neutral-900); }
+  .gh-pr-row + .gh-pr-row { border-top: 1px solid var(--line); }
+  .gh-pr-row:hover { background: var(--surface-hover); }
+  .gh-pr-row:focus-visible { outline-offset: -3px; }
+  .gh-pr-row > svg { width: 14px; color: var(--color-neutral-500); }
+  .gh-pr-title { display: block; font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+  .gh-pr-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px; color: var(--color-neutral-400); font-size: 11px; }
+  .gh-state { border: 1px solid currentColor; border-radius: 5px; padding: 2px 7px; }
+  .gh-review-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 12px 28px; border-block: 1px solid var(--line); }
+  .gh-conversation { max-width: 900px; margin-inline: auto; }
+  .gh-discussion { border: 1px solid var(--line); background: var(--color-neutral-900); border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+  .gh-discussion > header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; font-size: 12px; margin-bottom: 16px; color: var(--color-neutral-400); }
+  .gh-discussion > header strong { font-weight: 500; color: var(--color-neutral-200); }
+  .gh-discussion time { margin-left: auto; font-size: 11px; }
+  .gh-markdown { font-size: 13px; line-height: 1.75; color: var(--color-neutral-200); overflow-wrap: anywhere; }
+  .gh-markdown > * + * { margin-top: 12px; }
+  .gh-markdown h1, .gh-markdown h2, .gh-markdown h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+  .gh-markdown ul { list-style: disc; padding-left: 22px; }
+  .gh-markdown ol { list-style: decimal; padding-left: 22px; }
+  .gh-markdown ul.contains-task-list { list-style: none; padding-left: 0; }
+  .gh-markdown input { margin-right: 7px; }
+  .gh-markdown pre, .gh-thread-diff { overflow: auto; padding: 12px; border-radius: 6px; background: var(--color-neutral-950); font-size: 12px; }
+  .gh-markdown code { background: var(--color-neutral-950); padding: 2px 4px; border-radius: 3px; font-size: 12px; }
+  .gh-markdown pre code { padding: 0; }
+  .gh-markdown blockquote { border-left: 2px solid var(--color-neutral-600); padding-left: 14px; color: var(--color-neutral-400); }
+  .gh-markdown table { display: block; max-width: 100%; overflow: auto; border-collapse: collapse; }
+  .gh-markdown th, .gh-markdown td { border: 1px solid var(--line); padding: 6px 10px; }
+  .gh-input { background: var(--color-neutral-950); border: 1px solid var(--color-neutral-700); border-radius: 7px; padding: 10px 12px; font-size: 13px; color: var(--color-neutral-100); }
+  .gh-checks { max-width: 900px; margin-inline: auto; }
+  .gh-check-row { display: flex; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .gh-check-passed { color: #a9cebb; }
+  .gh-check-failed { color: #edb1b1; }
+  .gh-check-pending { color: #dfc08b; }
+  .gh-check-neutral { color: var(--color-neutral-400); }
+  .gh-merge-panel { display: flex; align-items: center; justify-content: space-between; gap: 20px; max-width: 900px; margin: 28px auto 0; padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--color-neutral-900); }
+  .gh-files { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: start; gap: 16px; }
+  .gh-file-list { max-height: 60vh; overflow: auto; position: sticky; top: 0; }
+  .gh-file-list button { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; text-align: left; font-size: 12px; padding: 10px; border: 1px solid transparent; border-radius: 6px; color: var(--color-neutral-400); }
+  .gh-file-list button:hover { background: var(--surface-hover); }
+  .gh-file-list button[aria-current] { color: var(--color-neutral-100); background: var(--surface-hover); border-color: var(--line); }
+  .gh-patch { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .gh-patch > header { padding: 12px; background: var(--color-neutral-900); font-size: 12px; }
+  .gh-patch > header strong { font-weight: 500; }
+  .gh-patch > header > span { margin-left: 10px; color: var(--color-neutral-400); }
+  .gh-patch-lines { width: max-content; min-width: 100%; font-size: 12px; line-height: 22px; }
+  .gh-patch-line { display: flex; }
+  .gh-line-number { width: 42px; flex-shrink: 0; text-align: right; padding-right: 8px; font-variant-numeric: tabular-nums; color: var(--color-neutral-400); user-select: none; }
+  .gh-line-action { width: 26px; flex-shrink: 0; }
+  .gh-line-action button { width: 20px; height: 20px; line-height: 18px; border-radius: 4px; color: var(--accent); opacity: 0; }
+  .gh-patch-line:hover .gh-line-action button, .gh-line-action button:focus-visible { opacity: 1; }
+  .gh-line-action button:hover { background: var(--accent); color: var(--color-neutral-950); }
+  .gh-line-action button:disabled { visibility: hidden; }
+  .gh-patch-line pre { padding-right: 12px; }
+  .gh-line-addition { background: #4ade8010; color: #bbebcd; }
+  .gh-line-deletion { background: #fb718512; color: #f4c0cb; }
+  .gh-line-hunk { background: var(--surface-hover); color: var(--accent); }
+}
+@media (max-width: 1000px) {
+  .gh-files { grid-template-columns: minmax(0, 1fr); }
+  .gh-file-list { position: static; max-height: 150px; }
+  .gh-pr-row time { display: none; }
+}

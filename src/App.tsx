@@ -18,6 +18,8 @@ import {
 
 type BootState = "loading" | "first-launch" | "ready";
 
+const GitHub = lazy(() => import("./pages/GitHub").then((module) => ({ default: module.GitHub })));
+const GitHubPull = lazy(() => import("./pages/GitHubPull").then((module) => ({ default: module.GitHubPull })));
 const RepoDetail = lazy(() =>
   import("./pages/RepoDetail").then((module) => ({
     default: module.RepoDetail,
@@ -103,6 +105,8 @@ function AppShell() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/repo/:path" element={<RepoDetail />} />
+                <Route path="/github" element={<GitHub />} />
+                <Route path="/github/:owner/:repo/pull/:number" element={<GitHubPull />} />
                 <Route path="/terminal" element={<Terminal />} />
                 <Route path="/agents" element={<Agents />} />
                 <Route path="/agents/:id" element={<AgentDetail />} />
