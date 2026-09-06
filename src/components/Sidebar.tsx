@@ -1,3 +1,4 @@
+import { Icon } from "./Icon";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { agentNeedsAttention } from "../lib/agents";
 import { useAgentSessions } from "../lib/agentSessions";
@@ -25,25 +26,6 @@ function GitIcon() {
       <circle cx="18" cy="6" r="2" />
       <circle cx="6" cy="18" r="2" />
       <path d="M6 8v8M8 6h8M18 8c0 5.5-4.5 10-10 10" />
-    </svg>
-  );
-}
-
-function TerminalIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <polyline points="4 17 10 11 4 5" />
-      <line x1="12" y1="19" x2="20" y2="19" />
     </svg>
   );
 }
@@ -129,7 +111,7 @@ export function Sidebar() {
         aria-current={isTerminal ? "page" : undefined}
         className={`${itemBase} ${isTerminal ? active : inactive}`}
       >
-        <TerminalIcon />
+        <Icon name="terminal" />
         <span className="nav-label">Terminal</span>
       </Link>
       <Link
