@@ -1,4 +1,4 @@
-import { check, type Update } from "@tauri-apps/plugin-updater";
+import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { LazyStore } from "@tauri-apps/plugin-store";
 
@@ -63,8 +63,8 @@ export async function checkForUpdate(): Promise<Update | null> {
   }
 }
 
-export async function installAndRelaunch(update: Update): Promise<void> {
-  await update.downloadAndInstall();
+export async function installAndRelaunch(update: Update, onProgress?: (event: DownloadEvent) => void): Promise<void> {
+  await update.downloadAndInstall(onProgress);
   await relaunch();
 }
 

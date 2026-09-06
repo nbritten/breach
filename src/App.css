@@ -328,3 +328,11 @@ html, body, #root { height: 100%; }
   .filter-clear { min-height: 32px; }
   .filter-summary { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; color: var(--color-neutral-500); font-size: 11px; }
 }
+
+@layer components {
+  .update-trigger { min-height: 30px; padding: 5px 9px; font-size: 11px; color: #b3d5c1; border-color: #b3d5c125; background: #b3d5c10a; }
+  .update-trigger:hover { background: #b3d5c118; }
+  .update-trigger svg { width: 14px; height: 14px; }
+  .update-panel { position: absolute; left: 0; top: calc(100% + 10px); z-index: 100; width: 300px; max-width: calc(100vw - 32px); padding: 18px; border: 1px solid #424954; border-radius: 12px; background: #1e2228; box-shadow: 0 16px 48px #00000060; outline: none; }
+  .update-progress { width: 100%; height: 4px; margin-top: 8px; border: 0; border-radius: 4px; accent-color: #bac8e8; }
+}
