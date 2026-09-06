@@ -23,10 +23,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          # Universal builds compile against both targets, so include both in
-          # the cache key — otherwise switching between arm-only and universal
-          # builds would invalidate the whole cache unnecessarily.
-          key: universal
+          # Caches are ref-scoped: a cache saved by one tag's run is invisible
+          # to the next tag's run, but tag runs can restore caches saved on
+          # main. warm-release-cache.yml builds with this same shared-key on
+          # pushes to main so releases start warm; saving from here would be
+          # dead weight, hence save-if: false.
+          shared-key: universal
+          save-if: "false"
       - run: npm ci
 
       - name: Import Apple Developer ID certificate
@@ -35,27 +38,13 @@ jobs:
           p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
           p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
 
-      # Build both architectures explicitly and lipo them ourselves. The
-      # `tauri-action --target universal-apple-darwin` path in v0.5.7 silently
-      # produced an arm64-only binary; doing the lipo step here is loud and
-      # verifiable, and the subsequent tauri-action call reuses these built
-      # artifacts (cargo fingerprint match) before bundling, signing, and
-      # notarizing.
-      - name: Build universal binary
-        working-directory: src-tauri
-        run: |
-          set -ex
-          cargo build --release --target aarch64-apple-darwin
-          cargo build --release --target x86_64-apple-darwin
-          mkdir -p target/universal-apple-darwin/release
-          lipo -create \
-            target/aarch64-apple-darwin/release/breach \
-            target/x86_64-apple-darwin/release/breach \
-            -output target/universal-apple-darwin/release/breach
-          file target/universal-apple-darwin/release/breach
-          lipo -info target/universal-apple-darwin/release/breach
-
+      # The release is created as a draft and only published after the
+      # verify step below confirms both architecture slices are present —
+      # the `--target universal-apple-darwin` path in tauri-action v0.5.7
+      # silently produced an arm64-only binary once, and a draft is cheap
+      # to delete while a published release is already live for updaters.
       - uses: tauri-apps/tauri-action@v0
+        id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -69,10 +58,25 @@ jobs:
           releaseName: ${{ github.ref_name }}
           releaseBody: |
             Signed and notarized macOS universal build (Apple Silicon + Intel).
-          releaseDraft: false
+          releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
           # Universal binary: lipos x86_64 and aarch64 slices into one .app.
           # The DMG roughly doubles in size (~10 MB → ~20 MB), but one
           # download serves both architectures.
           args: --target universal-apple-darwin
+
+      - name: Verify universal binary
+        run: |
+          set -ex
+          BIN="src-tauri/target/universal-apple-darwin/release/bundle/macos/Breach.app/Contents/MacOS/breach"
+          lipo -info "$BIN"
+          lipo "$BIN" -verify_arch arm64 x86_64
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X PATCH \
+            "repos/${GITHUB_REPOSITORY}/releases/${{ steps.tauri.outputs.releaseId }}" \
+            -F draft=false
