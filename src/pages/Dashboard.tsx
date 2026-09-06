@@ -1,3 +1,4 @@
+import { RepositoryFilters } from "../components/RepositoryFilters";
 import { usePinnedRepos } from "../lib/usePinnedRepos";
 import { TerminalLaunchButton } from "../components/TerminalLaunchButton";
 import { RefreshButton } from "../components/RefreshButton";
@@ -54,8 +55,6 @@ import {
   repoPinKey,
   repoPathLabel,
   sortRepos,
-  REPO_FILTER_ORDER,
-  repoFilterLabel,
   repoFilterCounts,
   type RepoFilter,
 } from "../lib/dashboard";
@@ -411,33 +410,9 @@ export function Dashboard() {
       </header>
 
       <main className="dashboard-content flex-1 overflow-auto">
-        {repos.length > 0 &&
-          REPO_FILTER_ORDER.some(
-            (f) => filterCounts[f] > 0 || activeFilters.has(f),
-          ) && (
-            <div className="filter-bar flex flex-wrap gap-2 mb-6">
-              {REPO_FILTER_ORDER.map((f) => {
-                const count = filterCounts[f];
-                const active = activeFilters.has(f);
-                // Hide chips with zero matches unless they're active — keeps
-                // the row quiet on a clean dashboard but never strands a
-                // chip the user toggled into a no-match state.
-                if (count === 0 && !active) return null;
-                return (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => toggleFilter(f)}
-                    aria-pressed={active}
-                    className={`filter-chip ${active ? "is-active" : ""}`}
-                  >
-                    {repoFilterLabel(f)}{" "}
-                    <span className="opacity-60">{count}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+        {repos.length > 0 && (
+          <RepositoryFilters counts={filterCounts} active={activeFilters} onToggle={toggleFilter} onClear={() => setActiveFilters(new Set())} visible={filteredRepos.length} total={searchFiltered.length} searching={Boolean(query.trim())} />
+        )}
         {error ? (
           <div className="text-rose-400 text-sm">{error}</div>
         ) : repos.length === 0 && !loading ? (
@@ -459,14 +434,16 @@ export function Dashboard() {
                 No repos match <span className="font-mono">"{query}"</span>
               </>
             }
-            subtitle="Try a different name or branch. Press Esc to clear."
+            subtitle={activeFilters.size > 0 ? "Try a different search or clear the active filters above." : "Try a different name or branch. Press Esc to clear."}
           />
         ) : filteredRepos.length === 0 && activeFilters.size > 0 ? (
           <EmptyState
             size="md"
             title="No repos match the active filters"
-            subtitle="Toggle a chip off above to widen the view."
-          />
+            subtitle="Clear your filters to see all repositories again."
+          >
+            <Button onClick={() => setActiveFilters(new Set())}>Clear filters</Button>
+          </EmptyState>
         ) : (
           <div className="flex flex-col gap-6">
             {sections.map((s) => {
