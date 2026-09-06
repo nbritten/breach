@@ -253,6 +253,45 @@ describe("sortRepos", () => {
   });
 });
 
+describe("repoPathLabel at scale", () => {
+  it("computes correct labels across many repos, including repeated calls on the same list", () => {
+    // Regression test for the per-card lookups being cached by the `repos`
+    // array reference: calling repoPathLabel/repoPinKey/isRepoPinned many
+    // times against the *same* large array (as Dashboard does once per
+    // rendered card) must keep returning results consistent with a
+    // freshly-built equivalent array.
+    const repos: RepoSummary[] = [];
+    for (let i = 0; i < 50; i++) {
+      repos.push(repo(`unique-${i}`, "main", `/dev/org${i}/unique-${i}`));
+    }
+    const acme = repo("frontend", "main", "/dev/acme/frontend");
+    const beta = repo("frontend", "main", "/dev/beta/frontend");
+    repos.push(acme, beta);
+
+    for (const r of repos) {
+      // called once per card, same array reference every time
+      repoPathLabel(r, repos);
+      repoPinKey(r, repos);
+      isRepoPinned(r, [], repos);
+    }
+
+    expect(repoPathLabel(acme, repos)).toBe("acme/frontend");
+    expect(repoPathLabel(beta, repos)).toBe("beta/frontend");
+    expect(repoPathLabel(repos[0], repos)).toBeNull();
+    expect(repoPinKey(acme, repos)).toBe("/dev/acme/frontend");
+    expect(repoPinKey(repos[0], repos)).toBe("unique-0");
+  });
+
+  it("does not confuse two distinct repos arrays with identical content", () => {
+    const acme = repo("frontend", "main", "/dev/acme/frontend");
+    const beta = repo("frontend", "main", "/dev/beta/frontend");
+    const listA = [acme, beta];
+    const listB = [acme, beta];
+    expect(repoPathLabel(acme, listA)).toBe("acme/frontend");
+    expect(repoPathLabel(acme, listB)).toBe("acme/frontend");
+  });
+});
+
 describe("prsForRepo", () => {
   const acme = {
     ...repo("frontend", "main", "/dev/acme/frontend"),
