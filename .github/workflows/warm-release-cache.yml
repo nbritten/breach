@@ -12,6 +12,9 @@ on:
     paths:
       - "src-tauri/**"
       - "package-lock.json"
+  # Manual trigger for the first warm-up after this workflow lands, or any
+  # time the cache has been evicted and a release is imminent.
+  workflow_dispatch:
 
 jobs:
   build:
