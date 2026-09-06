@@ -1,3 +1,4 @@
+import { Button } from "../components/Button";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api";
@@ -96,7 +97,7 @@ export function RepoDetail() {
 
   return (
     <div className="flex flex-col h-full">
-      <header className="border-b border-neutral-800 px-6 py-4 flex items-center gap-4">
+      <header className="page-header border-b border-neutral-800 flex items-center gap-4">
         <Link to="/" className="text-sm text-neutral-400 hover:text-neutral-100">
           ← Back
         </Link>
@@ -104,10 +105,10 @@ export function RepoDetail() {
           <h1 className="text-lg font-semibold truncate">{repoName}</h1>
           <p className="text-xs text-neutral-500 font-mono truncate">{repoPath}</p>
         </div>
-        <button
+        <Button
           onClick={() => openBreachTerminal().catch(showError)}
           title="Open in Breach Terminal"
-          className="shrink-0 px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm flex items-center gap-1.5"
+          variant="secondary"
         >
           <svg
             width="14"
@@ -123,32 +124,32 @@ export function RepoDetail() {
             <line x1="12" y1="19" x2="20" y2="19" />
           </svg>
           Terminal
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => openTerminal(repoPath).catch(showError)}
           title="Open in external terminal"
           aria-label="Open in external terminal"
-          className="shrink-0 px-2.5 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm"
+          variant="secondary"
         >
           ↗
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => setShowClean(true)}
-          className="shrink-0 px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm"
+          variant="secondary"
         >
           Clean…
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={doSync}
           disabled={syncing || !defaultBranch}
-          className="shrink-0 px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm disabled:opacity-50"
+          variant="secondary"
         >
           {syncing
             ? "Syncing…"
             : defaultBranch
             ? `Sync to ${defaultBranch}`
             : "Sync"}
-        </button>
+        </Button>
       </header>
 
       {syncMsg && (

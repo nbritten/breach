@@ -1,3 +1,4 @@
+import { Button } from "./Button";
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import {
@@ -66,13 +67,13 @@ export function SyncAllModal({ reposPath, onClose }: Props) {
 
   const footer = (
     <div className="flex justify-end">
-      <button
+      <Button
         onClick={onClose}
         disabled={!done}
-        className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-sm disabled:opacity-50"
+        variant="secondary"
       >
         {done ? "Close" : "Running…"}
-      </button>
+      </Button>
     </div>
   );
 

@@ -1,3 +1,4 @@
+import { Button } from "./Button";
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import type { DirtyFile } from "../types";
@@ -85,20 +86,20 @@ export function CleanModal({ repoPath, repoName, onClose, onDone }: Props) {
         />
         {error && <div className="text-rose-400 text-xs">{error}</div>}
         <div className="flex justify-end gap-2">
-          <button
+          <Button
             onClick={() => {
               setMode("idle");
               setConfirmText("");
               setError(null);
             }}
-            className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-sm"
+            variant="secondary"
           >
             ← Back
-          </button>
+          </Button>
           <button
             onClick={doDiscard}
             disabled={!canDiscard}
-            className="px-3 py-1.5 rounded bg-rose-600 hover:bg-rose-500 disabled:opacity-30 disabled:cursor-not-allowed text-sm text-white font-medium"
+            className="button bg-rose-600 hover:bg-rose-500 disabled:opacity-30 disabled:cursor-not-allowed text-sm text-white font-medium"
           >
             Discard permanently
           </button>
@@ -110,27 +111,27 @@ export function CleanModal({ repoPath, repoName, onClose, onDone }: Props) {
           <div className="text-rose-400 text-xs mb-2">{error}</div>
         )}
         <div className="flex justify-end gap-2">
-          <button
+          <Button
             onClick={onClose}
             disabled={mode === "working"}
-            className="px-3 py-1.5 rounded hover:bg-neutral-800 text-sm text-neutral-400 disabled:opacity-50"
+            variant="secondary"
           >
             Cancel
-          </button>
+          </Button>
           <button
             onClick={() => setMode("confirm-discard")}
             disabled={!hasFiles || mode === "working"}
-            className="px-3 py-1.5 rounded bg-rose-950 border border-rose-900 text-rose-300 hover:bg-rose-900 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
+            className="button bg-rose-950 border border-rose-900 text-rose-300 hover:bg-rose-900 disabled:opacity-30 disabled:cursor-not-allowed text-sm"
           >
             Discard all…
           </button>
-          <button
+          <Button
             onClick={doStash}
             disabled={!hasFiles || mode === "working"}
-            className="px-3 py-1.5 rounded bg-neutral-100 hover:bg-white text-neutral-900 disabled:opacity-30 disabled:cursor-not-allowed text-sm font-medium"
+            variant="primary"
           >
             {mode === "working" ? "Stashing…" : "Stash changes"}
-          </button>
+          </Button>
         </div>
       </>
     );

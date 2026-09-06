@@ -24,7 +24,7 @@ export function AgentCard({ session }: { session: AgentSession }) {
   return (
     <Link
       to={`/agents/${encodeURIComponent(session.id)}`}
-      className="block min-h-44 rounded-lg border border-neutral-800 bg-neutral-900 p-4 transition hover:border-neutral-600 hover:bg-neutral-800/60"
+      className="surface-card block min-h-44 border-neutral-800"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
@@ -61,7 +61,7 @@ export function AgentCard({ session }: { session: AgentSession }) {
         {message ?? "Agent session is active in this repository."}
       </p>
 
-      <div className="mt-4 flex items-center justify-between text-xs text-neutral-500">
+      <div className="mt-5 border-t border-neutral-800 pt-3 flex items-center justify-between text-xs text-neutral-500">
         <span>{relativeTime(session.updated_at)}</span>
         <span className="text-neutral-300">Open →</span>
       </div>

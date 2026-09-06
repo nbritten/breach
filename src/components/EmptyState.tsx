@@ -9,9 +9,9 @@ interface Props {
 }
 
 const SIZES: Record<NonNullable<Props["size"]>, { img: number; gap: string }> = {
-  sm: { img: 72, gap: "gap-3" },
-  md: { img: 128, gap: "gap-5" },
-  lg: { img: 192, gap: "gap-6" },
+  sm: { img: 36, gap: "gap-3" },
+  md: { img: 48, gap: "gap-5" },
+  lg: { img: 56, gap: "gap-6" },
 };
 
 export function EmptyState({ title, subtitle, size = "md", children }: Props) {
@@ -25,14 +25,14 @@ export function EmptyState({ title, subtitle, size = "md", children }: Props) {
         alt=""
         width={s.img}
         height={s.img}
-        className="whale-float opacity-90"
+        className="opacity-60"
         style={{ imageRendering: "pixelated" }}
         draggable={false}
       />
       <div className="space-y-1 max-w-md">
         <div className="text-neutral-200 text-sm font-medium">{title}</div>
         {subtitle && (
-          <div className="text-neutral-500 text-xs">{subtitle}</div>
+          <div className="text-neutral-400 text-sm leading-6">{subtitle}</div>
         )}
       </div>
       {children && <div className="mt-2">{children}</div>}

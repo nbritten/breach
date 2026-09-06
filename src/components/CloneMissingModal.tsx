@@ -1,3 +1,4 @@
+import { Button } from "./Button";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { getRepoOrgs } from "../lib/settings";
@@ -125,12 +126,12 @@ export function CloneMissingModal({ reposPath, scanNested, onClose }: Props) {
           {selected.size} of {candidates.length} selected
         </span>
         <div className="flex gap-2">
-          <button
+          <Button
             onClick={onClose}
-            className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-sm"
+            variant="secondary"
           >
             Cancel
-          </button>
+          </Button>
           <button
             onClick={onClone}
             disabled={selected.size === 0}
@@ -144,13 +145,13 @@ export function CloneMissingModal({ reposPath, scanNested, onClose }: Props) {
   } else {
     footer = (
       <div className="flex justify-end">
-        <button
+        <Button
           onClick={onClose}
           disabled={!closable}
-          className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-sm disabled:opacity-50"
+          variant="secondary"
         >
           {closable ? "Close" : "Cloning…"}
-        </button>
+        </Button>
       </div>
     );
   }

@@ -1,3 +1,4 @@
+import { Button } from "../Button";
 import type { ReactNode } from "react";
 
 interface Props {
@@ -20,16 +21,16 @@ export function SettingsSection({
   children,
 }: Props) {
   return (
-    <section className="mb-8">
+    <section className="settings-section mb-8">
       <div className="flex items-baseline justify-between mb-1">
         <label className="block text-sm font-medium">{label}</label>
         {onAdd && (
-          <button
+          <Button
             onClick={onAdd}
-            className="text-xs px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700"
+            variant="secondary"
           >
             {addLabel}
-          </button>
+          </Button>
         )}
       </div>
       {description && (

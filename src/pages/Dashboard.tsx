@@ -1,3 +1,4 @@
+import { Button } from "../components/Button";
 import {
   lazy,
   Suspense,
@@ -381,24 +382,24 @@ export function Dashboard() {
 
   return (
     <div className="flex flex-col h-full">
-      <header className="border-b border-neutral-800 px-6 py-4 flex items-center justify-between">
+      <header className="page-header border-b border-neutral-800 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold">Repositories</h1>
           <p className="text-xs text-neutral-500 font-mono">{reposPath}</p>
         </div>
-        <div className="flex items-center gap-3 text-sm">
+        <div className="page-actions flex flex-wrap items-center gap-2 text-sm">
           {repos.length > 0 && (
-            <span className="text-neutral-500">
-              {repos.length} repos · {dirtyCount} changed
+            <span className="repo-summary text-xs text-neutral-400">
+              {repos.length} repositories · {dirtyCount} changed
             </span>
           )}
           <Tooltip content="Open your repos directory in Breach Terminal.">
-            <button
+            <Button
               onClick={() =>
                 reposPath && openBreachTerminal(reposPath).catch(showError)
               }
               disabled={!reposPath}
-              className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50 flex items-center gap-1.5"
+              variant="secondary"
             >
               <svg
                 width="14"
@@ -414,26 +415,26 @@ export function Dashboard() {
                 <line x1="12" y1="19" x2="20" y2="19" />
               </svg>
               Terminal
-            </button>
+            </Button>
           </Tooltip>
           <Tooltip content="Open your repos directory in your configured external terminal app.">
-            <button
+            <Button
               onClick={() => reposPath && openTerminal(reposPath).catch(showError)}
               disabled={!reposPath}
               aria-label="Open in external terminal"
-              className="p-1.5 rounded text-neutral-500 hover:text-neutral-100 hover:bg-neutral-800 disabled:opacity-50"
+              variant="ghost" iconOnly
             >
               ↗
-            </button>
+            </Button>
           </Tooltip>
           <Tooltip content="Lists every non-archived repo in your configured GitHub accounts (orgs or users) that isn't local yet, then lets you pick which ones to clone.">
-            <button
+            <Button
               onClick={() => setShowClone(true)}
               disabled={loading}
-              className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50"
+              variant="secondary"
             >
               Clone missing
-            </button>
+            </Button>
           </Tooltip>
           <Tooltip
             content={
@@ -442,22 +443,22 @@ export function Dashboard() {
                 : "For every local repo: git fetch origin <default>, checkout <default>, merge --ff-only. Skips any repo with changes."
             }
           >
-            <button
+            <Button
               onClick={() => setShowSyncAll(true)}
               disabled={loading || repos.length === 0}
-              className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 disabled:opacity-50"
+              variant="secondary"
             >
               {pinnedOrder.length > 0
                 ? `Sync pinned (${pinnedOrder.length})`
                 : "Sync all"}
-            </button>
+            </Button>
           </Tooltip>
           <Tooltip content="Re-scans local repos (git status), re-queries PRs and CI, and reloads settings. Doesn't fetch from origin — use Sync for that.">
-            <button
+            <Button
               onClick={refresh}
               disabled={loading}
               aria-label="Refresh"
-              className="p-1.5 rounded text-neutral-500 hover:text-neutral-100 hover:bg-neutral-800 disabled:opacity-50"
+              variant="ghost" iconOnly
             >
               <svg
                 width="14"
@@ -473,17 +474,17 @@ export function Dashboard() {
                 <path d="M21 12a9 9 0 1 1-3-6.7" />
                 <path d="M21 3v6h-6" />
               </svg>
-            </button>
+            </Button>
           </Tooltip>
         </div>
       </header>
 
-      <main className="flex-1 overflow-auto p-6">
+      <main className="dashboard-content flex-1 overflow-auto">
         {repos.length > 0 &&
           REPO_FILTER_ORDER.some(
             (f) => filterCounts[f] > 0 || activeFilters.has(f),
           ) && (
-            <div className="flex flex-wrap gap-2 mb-4">
+            <div className="filter-bar flex flex-wrap gap-2 mb-6">
               {REPO_FILTER_ORDER.map((f) => {
                 const count = filterCounts[f];
                 const active = activeFilters.has(f);
@@ -497,11 +498,7 @@ export function Dashboard() {
                     type="button"
                     onClick={() => toggleFilter(f)}
                     aria-pressed={active}
-                    className={`px-2.5 py-1 rounded-full text-xs border transition ${
-                      active
-                        ? "bg-breach-pink/20 border-breach-pink/50 text-breach-pink"
-                        : "bg-neutral-800/60 border-neutral-700 text-neutral-300 hover:bg-neutral-800"
-                    }`}
+                    className={`filter-chip ${active ? "is-active" : ""}`}
                   >
                     {repoFilterLabel(f)}{" "}
                     <span className="opacity-60">{count}</span>
@@ -558,7 +555,7 @@ export function Dashboard() {
                       <span className="text-neutral-500 text-xs font-mono w-3">
                         {isOpen ? "▾" : "▸"}
                       </span>
-                      <h2 className="text-sm font-semibold tracking-wide uppercase text-neutral-300 group-hover:text-neutral-100">
+                      <h2 className="text-xs font-medium text-neutral-400 group-hover:text-neutral-100">
                         {s.label}
                       </h2>
                       <span className="text-xs text-neutral-500">
@@ -568,7 +565,7 @@ export function Dashboard() {
                     </button>
                   )}
                   {isOpen && (
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="repo-grid">
                       {s.repos.map((r) => (
                         <RepoCard
                           key={r.path}

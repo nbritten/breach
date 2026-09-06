@@ -101,14 +101,13 @@ export const RepoCard = memo(function RepoCard({
 
   const borderClass = justRefreshed
     ? "border-emerald-500/60"
-    : "border-neutral-800 hover:border-neutral-600";
+    : "border-neutral-800";
 
   return (
-    <Link
-      to={`/repo/${slug}`}
-      className={`block rounded-lg border bg-neutral-900 hover:bg-neutral-800/60 transition p-4 ${borderClass}`}
+    <article
+      className={`repo-card surface-card ${borderClass}`}
     >
-      <div className="flex items-center justify-between gap-2">
+      <div className="repo-card-heading flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           {ci && (
             <button
@@ -135,7 +134,7 @@ export const RepoCard = memo(function RepoCard({
                     key={provider}
                     title={`Active ${info.label} session`}
                     aria-label={`Active ${info.label} session`}
-                    className="shrink-0"
+                    className="relative z-[1] shrink-0"
                     style={{ color: info.iconColor }}
                   >
                     <svg
@@ -155,14 +154,14 @@ export const RepoCard = memo(function RepoCard({
             <span
               title="Active Breach terminal"
               aria-label="Active Breach terminal"
-              className="text-breach-pink shrink-0"
+              className="relative z-[1] text-breach-pink shrink-0"
             >
               &gt;_
             </span>
           )}
           <div className="min-w-0">
-            <h3 className="font-semibold truncate" title={repo.path}>
-              {repo.name}
+            <h3 className="text-sm font-semibold truncate" title={repo.path}>
+              <Link className="repo-card-link" to={`/repo/${slug}`}>{repo.name}</Link>
             </h3>
             {pathLabel && (
               <p
@@ -174,12 +173,62 @@ export const RepoCard = memo(function RepoCard({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {repo.dirty && (
-            <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              changes
-            </span>
+        {repo.dirty && (
+          <span className="status-badge status-changed">Changes</span>
+        )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-neutral-400">
+        <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-200 truncate max-w-[60%]">
+          {repo.branch ?? "—"}
+        </span>
+        {repo.has_upstream && (repo.ahead > 0 || repo.behind > 0) && (
+          <span className="text-xs flex items-center gap-1">
+            {repo.ahead > 0 && <span className="text-emerald-400">↑{repo.ahead}</span>}
+            {repo.behind > 0 && <span className="text-rose-400">↓{repo.behind}</span>}
+          </span>
+        )}
+        {!repo.has_upstream && (
+          <span className="text-xs text-neutral-500">no upstream</span>
+        )}
+        <div className="ml-auto flex items-center gap-1.5 shrink-0">
+          {authoredPrs.length > 0 && (
+            <button
+              onClick={(e) => openFirst(authoredPrs, e)}
+              title={`Your open PRs:\n${prTooltip(authoredPrs)}`}
+              aria-label={`${authoredPrs.length} open pull request${authoredPrs.length === 1 ? "" : "s"} you authored`}
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25"
+            >
+              PR {authoredPrs.length}
+            </button>
           )}
+          {reviewPrs.length > 0 && (
+            <button
+              onClick={(e) => openFirst(reviewPrs, e)}
+              title={`Awaiting your review:\n${prTooltip(reviewPrs)}`}
+              aria-label={`${reviewPrs.length} pull request${reviewPrs.length === 1 ? "" : "s"} awaiting your review`}
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25"
+            >
+              Review {reviewPrs.length}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {repo.last_commit ? (
+        <div className="mt-4 text-xs text-neutral-500 truncate" title={`${repo.last_commit.subject} · ${repo.last_commit.author} · ${relTime(repo.last_commit.timestamp)}`}>
+          <span className="text-neutral-400">{repo.last_commit.subject}</span>
+          <span className="text-neutral-500">
+            {" "}
+            · {repo.last_commit.author} · {relTime(repo.last_commit.timestamp)}
+          </span>
+        </div>
+      ) : repo.error ? (
+        <div className="mt-3 text-xs text-rose-400 truncate">{repo.error}</div>
+      ) : null}
+      <div className="repo-card-footer">
+        <span className="repo-card-open text-xs text-neutral-400" aria-hidden="true">Open repository ↗</span>
+        <div className="repo-card-actions flex items-center gap-1">
           {onTogglePin && (
             <button
               onClick={(e: MouseEvent) => {
@@ -298,55 +347,6 @@ export const RepoCard = memo(function RepoCard({
           </button>
         </div>
       </div>
-
-      <div className="mt-2 flex items-center gap-2 text-sm text-neutral-400">
-        <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-200 truncate max-w-[60%]">
-          {repo.branch ?? "—"}
-        </span>
-        {repo.has_upstream && (repo.ahead > 0 || repo.behind > 0) && (
-          <span className="text-xs flex items-center gap-1">
-            {repo.ahead > 0 && <span className="text-emerald-400">↑{repo.ahead}</span>}
-            {repo.behind > 0 && <span className="text-rose-400">↓{repo.behind}</span>}
-          </span>
-        )}
-        {!repo.has_upstream && (
-          <span className="text-xs text-neutral-600">no upstream</span>
-        )}
-        <div className="ml-auto flex items-center gap-1.5 shrink-0">
-          {authoredPrs.length > 0 && (
-            <button
-              onClick={(e) => openFirst(authoredPrs, e)}
-              title={`Your open PRs:\n${prTooltip(authoredPrs)}`}
-              aria-label={`${authoredPrs.length} open pull request${authoredPrs.length === 1 ? "" : "s"} you authored`}
-              className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25"
-            >
-              PR {authoredPrs.length}
-            </button>
-          )}
-          {reviewPrs.length > 0 && (
-            <button
-              onClick={(e) => openFirst(reviewPrs, e)}
-              title={`Awaiting your review:\n${prTooltip(reviewPrs)}`}
-              aria-label={`${reviewPrs.length} pull request${reviewPrs.length === 1 ? "" : "s"} awaiting your review`}
-              className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25"
-            >
-              RR {reviewPrs.length}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {repo.last_commit ? (
-        <div className="mt-3 text-xs text-neutral-500 truncate">
-          <span className="text-neutral-400">{repo.last_commit.subject}</span>
-          <span className="text-neutral-600">
-            {" "}
-            · {repo.last_commit.author} · {relTime(repo.last_commit.timestamp)}
-          </span>
-        </div>
-      ) : repo.error ? (
-        <div className="mt-3 text-xs text-rose-400 truncate">{repo.error}</div>
-      ) : null}
-    </Link>
+    </article>
   );
 });
