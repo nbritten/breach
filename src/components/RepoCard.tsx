@@ -2,7 +2,7 @@ import { RefreshButton } from "./RefreshButton";
 import { memo, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { openTerminal } from "../lib/settings";
+import { TerminalLaunchButton } from "./TerminalLaunchButton";
 import { useToast } from "../lib/toast";
 import type {
   AgentProvider,
@@ -262,44 +262,8 @@ export const RepoCard = memo(function RepoCard({
               </svg>
             </button>
           )}
-          <button
-            onClick={(e: MouseEvent) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onOpenTerminal?.(repo.path).catch(showError);
-            }}
-            title="Open in Breach Terminal"
-            aria-label="Open in Breach Terminal"
-            className="p-1 rounded text-neutral-500 hover:text-neutral-100 hover:bg-neutral-700/60"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="4 17 10 11 4 5" />
-              <line x1="12" y1="19" x2="20" y2="19" />
-            </svg>
-          </button>
-          <button
-            onClick={(e: MouseEvent) => {
-              e.preventDefault();
-              e.stopPropagation();
-              openTerminal(repo.path).catch(showError);
-            }}
-            title="Open in external terminal"
-            aria-label="Open in external terminal"
-            className="p-1 rounded text-neutral-500 hover:text-neutral-100 hover:bg-neutral-700/60"
-          >
-            <span aria-hidden="true" className="text-xs leading-none">
-              ↗
-            </span>
-          </button>
+          <TerminalLaunchButton path={repo.path} onOpen={onOpenTerminal} iconOnly />
+          <TerminalLaunchButton path={repo.path} external iconOnly />
           <RefreshButton onRefresh={() => onRefresh(repo.path)} label="Refresh this repo" description={`Refresh status for ${repo.name}`} />
         </div>
       </div>

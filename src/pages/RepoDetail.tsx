@@ -1,3 +1,4 @@
+import { TerminalLaunchButton } from "../components/TerminalLaunchButton";
 import { Button } from "../components/Button";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -6,9 +7,7 @@ import {
   branchForRepo,
   getBranchOverrides,
   getDefaultBranch,
-  openTerminal,
 } from "../lib/settings";
-import { useToast } from "../lib/toast";
 import { errorText } from "../lib/errors";
 import { useTerminalSession } from "../lib/terminalSession";
 import { DiffView } from "../components/DiffView";
@@ -36,7 +35,6 @@ export function RepoDetail() {
   const [defaultBranch, setDefaultBranch] = useState<string>("");
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
-  const { showError } = useToast();
 
   const openBreachTerminal = async () => {
     await openEmbeddedTerminal(repoPath);
@@ -105,34 +103,8 @@ export function RepoDetail() {
           <h1 className="text-lg font-semibold truncate">{repoName}</h1>
           <p className="text-xs text-neutral-500 font-mono truncate">{repoPath}</p>
         </div>
-        <Button
-          onClick={() => openBreachTerminal().catch(showError)}
-          title="Open in Breach Terminal"
-          variant="secondary"
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="4 17 10 11 4 5" />
-            <line x1="12" y1="19" x2="20" y2="19" />
-          </svg>
-          Terminal
-        </Button>
-        <Button
-          onClick={() => openTerminal(repoPath).catch(showError)}
-          title="Open in external terminal"
-          aria-label="Open in external terminal"
-          variant="secondary"
-        >
-          ↗
-        </Button>
+        <TerminalLaunchButton path={repoPath} onOpen={openBreachTerminal} />
+        <TerminalLaunchButton path={repoPath} external iconOnly />
         <Button
           onClick={() => setShowClean(true)}
           variant="secondary"

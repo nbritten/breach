@@ -1,3 +1,5 @@
+import { TerminalLaunchButton } from "../components/TerminalLaunchButton";
+import { Icon } from "../components/Icon";
 import { Button } from "../components/Button";
 import { useEffect, useRef, useState } from "react";
 import { TerminalView } from "../components/TerminalView";
@@ -47,13 +49,12 @@ export function Terminal() {
             {active?.cwd ?? "No active session"}
           </p>
         </div>
-        <Button
-          type="button"
-          onClick={() => void create().catch(showError)}
-          variant="secondary" className="ml-4"
-        >
-          New terminal
-        </Button>
+        <div className="flex items-center gap-2">
+          <TerminalLaunchButton path={active?.cwd ?? ""} external />
+          <Button onClick={() => void create().catch(showError)}>
+            <Icon name="plus" /> New terminal
+          </Button>
+        </div>
       </header>
       <main className="flex-1 min-h-0">
         {active ? (
