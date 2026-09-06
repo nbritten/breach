@@ -1,3 +1,4 @@
+import { ThemePicker } from "../components/ThemePicker";
 import { Button } from "../components/Button";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -276,6 +277,7 @@ export function Settings() {
       </header>
 
       <main className="settings-content p-6 max-w-3xl w-full overflow-auto relative z-10">
+        <ThemePicker />
         <section className="mb-8">
           <label className="block text-sm font-medium mb-1">Repos path</label>
           <p className="text-xs text-neutral-500 mb-2">

@@ -1,3 +1,5 @@
+import { useTheme } from "../lib/themeState";
+import { themeVariables } from "../lib/themes";
 import { useEffect, useRef, useState } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
@@ -11,6 +13,7 @@ import { errorText } from "../lib/errors";
 const encoder = new TextEncoder();
 
 export function TerminalView({ sessionId }: { sessionId: string }) {
+  const theme = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
@@ -142,6 +145,20 @@ export function TerminalView({ sessionId }: { sessionId: string }) {
       searchAddonRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const colors = themeVariables(theme);
+    if (terminalRef.current) {
+      terminalRef.current.options.theme = {
+        ...terminalRef.current.options.theme,
+        background: colors["--color-neutral-950"],
+        foreground: colors["--color-neutral-200"],
+        cursor: colors["--accent"],
+        cursorAccent: colors["--color-neutral-950"],
+        selectionBackground: `${colors["--accent"]}40`,
+      };
+    }
+  }, [theme]);
 
   const find = (previous = false) => {
     if (!searchQuery) return;
