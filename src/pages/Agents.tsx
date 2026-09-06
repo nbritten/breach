@@ -1,3 +1,4 @@
+import { RefreshButton } from "../components/RefreshButton";
 import { Button } from "../components/Button";
 import { useMemo, useState } from "react";
 import { AgentCard } from "../components/AgentCard";
@@ -43,13 +44,7 @@ export function Agents() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button
-              type="button"
-              onClick={refresh}
-              variant="secondary"
-            >
-              Refresh
-            </Button>
+            <RefreshButton onRefresh={refresh} busy={loading} iconOnly={false} description="Find active agents across your repositories" />
             <Button
               type="button"
               onClick={() => setShowNewAgent(true)}

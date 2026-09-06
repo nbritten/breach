@@ -270,3 +270,26 @@ html, body, #root { height: 100%; }
     scroll-behavior: auto !important;
   }
 }
+
+@layer components {
+  .control-hint { vertical-align: middle; flex-shrink: 0; }
+  .control-tooltip {
+    position: fixed;
+    z-index: 300;
+    max-width: calc(100vw - 16px);
+    padding: 9px 12px;
+    border: 1px solid #414854;
+    border-radius: 8px;
+    background: #24282f;
+    color: #e1e6ef;
+    font-size: 12px;
+    line-height: 1.5;
+    pointer-events: none;
+    box-shadow: 0 4px 16px #00000040;
+  }
+  .action-control { min-width: 34px; }
+  .action-control[data-state="success"] { color: #a9cebb; }
+  .action-control[data-state="error"] { color: #f2b0b0; }
+  .action-control[aria-busy="true"] { opacity: 0.75; cursor: wait; }
+  .repo-card-actions .button { min-width: 30px; width: 30px; height: 30px; min-height: 30px; padding: 6px; }
+}

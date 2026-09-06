@@ -17,7 +17,7 @@ interface AgentSessionsValue {
   repos: RepoSummary[];
   loading: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: () => Promise<boolean>;
 }
 
 const Context = createContext<AgentSessionsValue | null>(null);
@@ -40,8 +40,10 @@ export function AgentSessionsProvider({ children }: { children: ReactNode }) {
         await api.listActiveAgentSessions(repos.map(({ path }) => path)),
       );
       setError(null);
+      return true;
     } catch (cause) {
       setError(errorText(cause));
+      return false;
     } finally {
       setLoading(false);
     }
