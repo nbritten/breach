@@ -15,10 +15,23 @@ const validPayload: SettingsExport = {
     checkForUpdates: true,
     scanNestedRepos: false,
     groupNestedRepos: true,
+    theme: "graphite",
   },
 };
 
 describe("parseImport", () => {
+  it("imports older files with the default theme", () => {
+    const { theme: _theme, ...settings } = validPayload.settings;
+    expect(parseImport(JSON.stringify({ ...validPayload, settings })).settings.theme).toBe("graphite");
+  });
+
+  it("round-trips theme choices and rejects unknown themes", () => {
+    const payload = { ...validPayload, settings: { ...validPayload.settings, theme: "plum" } };
+    expect(parseImport(JSON.stringify(payload)).settings.theme).toBe("plum");
+    payload.settings.theme = "missing";
+    expect(() => parseImport(JSON.stringify(payload))).toThrow(/theme/);
+  });
+
   it("accepts a well-formed payload", () => {
     const parsed = parseImport(JSON.stringify(validPayload));
     expect(parsed).toEqual(validPayload);

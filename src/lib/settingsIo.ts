@@ -1,3 +1,5 @@
+import { DEFAULT_THEME, isThemeId, type ThemeId } from "./themes";
+import { selectTheme } from "./themeState";
 import { api } from "./api";
 import {
   FALLBACK_DEFAULT_BRANCH,
@@ -12,6 +14,7 @@ import {
   getServiceRepos,
   getServiceUrlTemplate,
   getTerminalApp,
+  getTheme,
   setBranchOverrides,
   setCheckForUpdates,
   setDefaultBranch,
@@ -41,6 +44,7 @@ export interface SettingsExport {
     checkForUpdates: boolean;
     scanNestedRepos: boolean;
     groupNestedRepos: boolean;
+    theme: ThemeId;
   };
 }
 
@@ -59,6 +63,7 @@ export async function buildExport(): Promise<SettingsExport> {
     checkForUpdates,
     scanNestedRepos,
     groupNestedRepos,
+    theme,
   ] = await Promise.all([
     getReposPath(),
     getDefaultBranch(),
@@ -71,6 +76,7 @@ export async function buildExport(): Promise<SettingsExport> {
     getCheckForUpdates(),
     getScanNestedRepos(),
     getGroupNestedRepos(),
+    getTheme(),
   ]);
   return {
     version: SETTINGS_VERSION,
@@ -86,6 +92,7 @@ export async function buildExport(): Promise<SettingsExport> {
       checkForUpdates,
       scanNestedRepos,
       groupNestedRepos,
+      theme,
     },
   };
 }
@@ -168,9 +175,14 @@ export function parseImport(text: string): SettingsExport {
     throw new Error("`groupNestedRepos` must be a boolean");
   }
 
+  if (s.theme !== undefined && !isThemeId(s.theme)) {
+    throw new Error("Unknown `theme`");
+  }
+
   return {
     version: data.version,
     settings: {
+      theme: isThemeId(s.theme) ? s.theme : DEFAULT_THEME,
       reposPath: s.reposPath,
       defaultBranch: s.defaultBranch,
       branchOverrides: s.branchOverrides,
@@ -203,6 +215,7 @@ export async function applyImport(payload: SettingsExport): Promise<void> {
     setCheckForUpdates(s.checkForUpdates),
     setScanNestedRepos(s.scanNestedRepos),
     setGroupNestedRepos(s.groupNestedRepos),
+    selectTheme(s.theme),
   ]);
 }
 
@@ -219,6 +232,7 @@ function normalizeSettings(
     if (name && branch) cleanedOverrides[name] = branch;
   }
   return {
+    theme: s.theme,
     reposPath: s.reposPath.trim(),
     defaultBranch: s.defaultBranch.trim() || FALLBACK_DEFAULT_BRANCH,
     branchOverrides: cleanedOverrides,
