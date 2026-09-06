@@ -1,3 +1,4 @@
+import { PinButton } from "./PinButton";
 import { RefreshButton } from "./RefreshButton";
 import { memo, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
@@ -29,7 +30,7 @@ interface Props {
   authoredPrs?: PrInfo[];
   reviewPrs?: PrInfo[];
   pinned?: boolean;
-  onTogglePin?: (key: string) => void;
+  onTogglePin?: (key: string) => void | Promise<void>;
   pinKey?: string;
   pathLabel?: string | null;
   ci?: CiStatus;
@@ -206,36 +207,7 @@ export const RepoCard = memo(function RepoCard({
       <div className="repo-card-footer">
         <span className="repo-card-open text-xs text-neutral-400" aria-hidden="true">Open repository ↗</span>
         <div className="repo-card-actions flex items-center gap-1">
-          {onTogglePin && (
-            <button
-              onClick={(e: MouseEvent) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onTogglePin(pinKey ?? repo.name);
-              }}
-              title={pinned ? "Unpin" : "Pin"}
-              aria-label={pinned ? "Unpin" : "Pin"}
-              className={`p-1 rounded hover:bg-neutral-700/60 ${
-                pinned
-                  ? "text-amber-300 hover:text-amber-200"
-                  : "text-neutral-500 hover:text-neutral-100"
-              }`}
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill={pinned ? "currentColor" : "none"}
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 17v5" />
-                <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
-              </svg>
-            </button>
-          )}
+          {onTogglePin && <PinButton pinned={pinned} name={repo.name} onToggle={() => onTogglePin(pinKey ?? repo.name)} />}
           {docsUrl && (
             <button
               onClick={(e: MouseEvent) => {

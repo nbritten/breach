@@ -22,7 +22,7 @@ describe("repository card navigation", () => {
     expect(links).toHaveLength(1);
     expect(links[0]).toContain(`/repo/${encodeURIComponent(repo.path)}`);
     expect(links[0]).not.toContain("<button");
-    for (const label of ["Pin", "Open service docs", "Open in Breach Terminal", "Open in external terminal", "Refresh this repo"]) {
+    for (const label of [`Pin ${repo.name}`, "Open service docs", "Open in Breach Terminal", "Open in external terminal", "Refresh this repo"]) {
       expect(html).toContain(`aria-label="${label}"`);
     }
   });

@@ -307,3 +307,10 @@ html, body, #root { height: 100%; }
   .terminal-tab-close:hover { background: #ffffff0d; color: #fff; }
   .terminal-tab-input { min-width: 0; width: 140px; margin: 3px 7px; padding: 3px 5px; font-size: 12px; background: var(--color-neutral-950); }
 }
+
+@layer components {
+  .pin-control { color: var(--color-neutral-500); }
+  .pin-control[aria-pressed="true"] { color: #c7d6f3; background: #bac8e814; border-color: #bac8e82b; }
+  .pin-control[aria-pressed="true"]:hover { background: #bac8e822; }
+  .pin-control[aria-busy="true"] { opacity: 0.75; cursor: wait; }
+}
