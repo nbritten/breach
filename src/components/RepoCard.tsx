@@ -1,4 +1,5 @@
-import { memo, useState, type MouseEvent } from "react";
+import { RefreshButton } from "./RefreshButton";
+import { memo, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { openTerminal } from "../lib/settings";
@@ -24,7 +25,7 @@ function relTime(ts: number): string {
 
 interface Props {
   repo: RepoSummary;
-  onRefresh: (path: string) => Promise<void>;
+  onRefresh: (path: string) => Promise<unknown>;
   authoredPrs?: PrInfo[];
   reviewPrs?: PrInfo[];
   pinned?: boolean;
@@ -70,8 +71,6 @@ export const RepoCard = memo(function RepoCard({
   onOpenTerminal,
 }: Props) {
   const slug = encodeURIComponent(repo.path);
-  const [refreshing, setRefreshing] = useState(false);
-  const [justRefreshed, setJustRefreshed] = useState(false);
   const { showError } = useToast();
 
   const openFirst = (prs: PrInfo[], e: MouseEvent) => {
@@ -81,31 +80,9 @@ export const RepoCard = memo(function RepoCard({
     openUrl(prs[0].url).catch(showError);
   };
 
-  const handleRefresh = async (e: MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setRefreshing(true);
-    const started = Date.now();
-    try {
-      await onRefresh(repo.path);
-      const elapsed = Date.now() - started;
-      if (elapsed < 500) {
-        await new Promise((r) => setTimeout(r, 500 - elapsed));
-      }
-      setJustRefreshed(true);
-      setTimeout(() => setJustRefreshed(false), 800);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const borderClass = justRefreshed
-    ? "border-emerald-500/60"
-    : "border-neutral-800";
-
   return (
     <article
-      className={`repo-card surface-card ${borderClass}`}
+      className="repo-card surface-card border-neutral-800"
     >
       <div className="repo-card-heading flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -323,28 +300,7 @@ export const RepoCard = memo(function RepoCard({
               ↗
             </span>
           </button>
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            title="Refresh this repo"
-            aria-label="Refresh this repo"
-            className="p-1 rounded text-neutral-500 hover:text-neutral-100 hover:bg-neutral-700/60 disabled:opacity-50"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className={refreshing ? "animate-spin" : ""}
-            >
-              <path d="M21 12a9 9 0 1 1-3-6.7" />
-              <path d="M21 3v6h-6" />
-            </svg>
-          </button>
+          <RefreshButton onRefresh={() => onRefresh(repo.path)} label="Refresh this repo" description={`Refresh status for ${repo.name}`} />
         </div>
       </div>
     </article>

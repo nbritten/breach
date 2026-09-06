@@ -1,3 +1,4 @@
+import { RefreshButton } from "../components/RefreshButton";
 import { Button } from "../components/Button";
 import {
   lazy,
@@ -193,8 +194,10 @@ export function Dashboard() {
       } else {
         setCiByPath({});
       }
+      return true;
     } catch (e) {
       setError(errorText(e));
+      return false;
     } finally {
       lastRefreshAt.current = Date.now();
       setLoading(false);
@@ -248,6 +251,7 @@ export function Dashboard() {
       setRepos((prev) => prev.map((r) => (r.path === path ? updated : r)));
     } catch {
       refreshRef.current();
+      throw new Error("This repository could not be refreshed. The repository list is being reloaded.");
     }
   }, []);
   refreshRef.current = refresh;
@@ -311,7 +315,7 @@ export function Dashboard() {
           path,
           window.setTimeout(() => {
             debounceTimers.delete(path);
-            refreshOne(path);
+            void refreshOne(path).catch(() => {});
           }, REFRESH_ONE_DEBOUNCE_MS),
         );
       } else if (Date.now() - lastUnknownRefreshAt >= UNKNOWN_PATH_REFRESH_GAP_MS) {
@@ -453,29 +457,7 @@ export function Dashboard() {
                 : "Sync all"}
             </Button>
           </Tooltip>
-          <Tooltip content="Re-scans local repos (git status), re-queries PRs and CI, and reloads settings. Doesn't fetch from origin — use Sync for that.">
-            <Button
-              onClick={refresh}
-              disabled={loading}
-              aria-label="Refresh"
-              variant="ghost" iconOnly
-            >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className={loading ? "animate-spin" : ""}
-              >
-                <path d="M21 12a9 9 0 1 1-3-6.7" />
-                <path d="M21 3v6h-6" />
-              </svg>
-            </Button>
-          </Tooltip>
+          <RefreshButton onRefresh={refresh} busy={loading} iconOnly={false} description="Refresh local repositories. Pull requests and checks also update in the background." />
         </div>
       </header>
 
