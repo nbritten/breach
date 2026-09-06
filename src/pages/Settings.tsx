@@ -1,6 +1,6 @@
+import { Button } from "../components/Button";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import logo from "../assets/logo.png";
 import { useOnboarding } from "../lib/onboarding";
 import {
   FALLBACK_DEFAULT_BRANCH,
@@ -268,24 +268,14 @@ export function Settings() {
 
   return (
     <div className="flex flex-col h-full relative">
-      <img
-        src={logo}
-        alt=""
-        width={360}
-        height={360}
-        aria-hidden
-        className="pointer-events-none absolute bottom-0 right-0 opacity-[0.04]"
-        style={{ imageRendering: "pixelated" }}
-        draggable={false}
-      />
-      <header className="border-b border-neutral-800 px-6 py-4 flex items-center gap-4 relative z-10">
+      <header className="page-header border-b border-neutral-800 flex items-center gap-4 relative z-10">
         <Link to="/" className="text-sm text-neutral-400 hover:text-neutral-100">
           ← Back
         </Link>
         <h1 className="text-lg font-semibold">Settings</h1>
       </header>
 
-      <main className="p-6 max-w-2xl overflow-auto relative z-10">
+      <main className="settings-content p-6 max-w-3xl w-full overflow-auto relative z-10">
         <section className="mb-8">
           <label className="block text-sm font-medium mb-1">Repos path</label>
           <p className="text-xs text-neutral-500 mb-2">
@@ -400,14 +390,14 @@ export function Settings() {
             </span>
           </label>
           <div className="mt-2 pl-6">
-            <button
+            <Button
               type="button"
               onClick={checkUpdatesNow}
               disabled={checkingUpdate}
-              className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              variant="secondary"
             >
               {checkingUpdate ? "Checking…" : "Check now"}
-            </button>
+            </Button>
           </div>
         </section>
 
@@ -554,31 +544,31 @@ export function Settings() {
         </section>
 
         <div className="flex items-center gap-3">
-          <button
+          <Button
             onClick={async () => {
               // Save returns true on success; only navigate away then so a
               // validation/persist failure leaves the user on the form with
               // their unsaved edits and the error toast they got from save().
               if (await save()) navigate("/");
             }}
-            className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm"
+            variant="secondary"
           >
             Save
-          </button>
+          </Button>
           {saved && <span className="text-xs text-emerald-400">Saved</span>}
           {imported && <span className="text-xs text-emerald-400">Imported</span>}
-          <button
+          <Button
             onClick={onExport}
-            className="ml-auto px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm"
+            variant="secondary" className="ml-auto"
           >
             Export
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={onImport}
-            className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm"
+            variant="secondary"
           >
             Import
-          </button>
+          </Button>
           <button
             onClick={showOnboarding}
             className="text-xs text-neutral-500 hover:text-neutral-300 underline underline-offset-2"

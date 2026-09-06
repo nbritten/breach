@@ -90,11 +90,11 @@ function AppShell() {
 
   return (
     <AgentSessionsProvider>
-      <div className="h-full flex flex-col">
+      <div className="app-shell h-full flex flex-col">
         <TopBar />
         <div className="flex-1 flex overflow-hidden">
           <Sidebar />
-          <div className="flex-1 overflow-hidden">
+          <div className="workspace flex-1 min-w-0 overflow-hidden">
             <Suspense
               fallback={
                 <div className="p-6 text-sm text-neutral-500">Loading…</div>

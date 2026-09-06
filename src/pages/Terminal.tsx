@@ -1,3 +1,4 @@
+import { Button } from "../components/Button";
 import { useEffect, useRef, useState } from "react";
 import { TerminalView } from "../components/TerminalView";
 import {
@@ -39,20 +40,20 @@ export function Terminal() {
 
   return (
     <div className="h-full flex flex-col">
-      <header className="border-b border-neutral-800 px-6 py-3 flex items-center justify-between">
+      <header className="page-header border-b border-neutral-800 flex items-center justify-between">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold">Terminal</h1>
           <p className="text-xs text-neutral-500 font-mono truncate">
             {active?.cwd ?? "No active session"}
           </p>
         </div>
-        <button
+        <Button
           type="button"
           onClick={() => void create().catch(showError)}
-          className="ml-4 shrink-0 px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-sm"
+          variant="secondary" className="ml-4"
         >
           New terminal
-        </button>
+        </Button>
       </header>
       <main className="flex-1 min-h-0">
         {active ? (

@@ -1,3 +1,4 @@
+import { Button } from "../components/Button";
 import { useMemo, useState } from "react";
 import { AgentCard } from "../components/AgentCard";
 import { EmptyState } from "../components/EmptyState";
@@ -42,21 +43,21 @@ export function Agents() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button
+            <Button
               type="button"
               onClick={refresh}
-              className="rounded-md border border-neutral-800 px-3 py-1.5 text-xs text-neutral-400 hover:border-neutral-600 hover:text-neutral-100"
+              variant="secondary"
             >
               Refresh
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
               onClick={() => setShowNewAgent(true)}
               disabled={repos.length === 0}
-              className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-950 hover:bg-white disabled:opacity-50"
+              variant="primary"
             >
               New agent
-            </button>
+            </Button>
           </div>
         </div>
 
