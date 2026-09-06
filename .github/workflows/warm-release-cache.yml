@@ -1,0 +1,38 @@
+name: warm-release-cache
+
+# GitHub Actions caches are ref-scoped: a cache saved during a tag build is
+# invisible to the next tag's build, so release runs would always compile
+# from scratch. Tag runs *can* restore caches saved on the default branch,
+# so this workflow builds the release targets on pushes to main and saves
+# them under the same shared-key that release.yml restores.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src-tauri/**"
+      - "package-lock.json"
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          shared-key: universal
+      - run: npm ci
+      # --no-bundle compiles exactly what `tauri build` compiles during a
+      # release (both targets, custom-protocol feature enabled) while
+      # skipping bundling, signing, and notarization. A plain `cargo build`
+      # would not match: tauri enables custom-protocol, so the fingerprints
+      # would differ and the release build would recompile anyway.
+      - run: npm run tauri build -- --target universal-apple-darwin --no-bundle
