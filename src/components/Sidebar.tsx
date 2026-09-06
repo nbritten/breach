@@ -74,6 +74,7 @@ export function Sidebar() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const isGit = pathname === "/" || pathname.startsWith("/repo/");
+  const isGitHub = pathname.startsWith("/github");
   const isTerminal = pathname.startsWith("/terminal");
   const isAgents = pathname.startsWith("/agents");
   const isSettings = pathname.startsWith("/settings");
@@ -103,6 +104,10 @@ export function Sidebar() {
       >
         <GitIcon />
         <span className="nav-label">Repositories</span>
+      </Link>
+      <Link to="/github" title="GitHub" aria-label="GitHub" aria-current={isGitHub ? "page" : undefined} className={`${itemBase} ${isGitHub ? active : inactive}`}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 7v10m7-13 3 3-3 3m3-3h1a1 1 0 0 1 1 1v9"/></svg>
+        <span className="nav-label">GitHub</span>
       </Link>
       <Link
         to="/terminal"
