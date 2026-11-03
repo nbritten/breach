@@ -90,10 +90,16 @@ pub async fn list_active_agent_sessions(
         command.args(["-c", process_name]);
     }
     command.args(["-F", "pcn"]);
-    let output = command
-        .output()
-        .await
-        .map_err(|e| format!("lsof spawn failed: {e}"))?;
+    // The lsof snapshot, Claude's session list, and Codex's thread list come
+    // from three independent subprocesses; gather them concurrently and merge
+    // in the same order as before.
+    let codex_repos = repo_paths.clone();
+    let (output, claude_output, codex_sessions) = tokio::join!(
+        command.output(),
+        Command::new("claude").args(["agents", "--json"]).output(),
+        tokio::task::spawn_blocking(move || list_codex_threads(&codex_repos)),
+    );
+    let output = output.map_err(|e| format!("lsof spawn failed: {e}"))?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let detected = parse_lsof_output(&stdout);
     let mut sessions = Vec::new();
@@ -124,11 +130,7 @@ pub async fn list_active_agent_sessions(
     // Claude exposes stable session metadata through its own CLI. Enrich the
     // process snapshot when available, but keep lsof as the provider-neutral
     // fallback when the command is absent or its JSON contract changes.
-    if let Ok(output) = Command::new("claude")
-        .args(["agents", "--json"])
-        .output()
-        .await
-    {
+    if let Ok(output) = claude_output {
         if output.status.success() {
             for native in parse_claude_sessions(&output.stdout) {
                 let Some(repo_path) = repo_paths
@@ -165,10 +167,7 @@ pub async fn list_active_agent_sessions(
         }
     }
 
-    let codex_repos = repo_paths.clone();
-    if let Ok(native_sessions) =
-        tokio::task::spawn_blocking(move || list_codex_threads(&codex_repos)).await
-    {
+    if let Ok(native_sessions) = codex_sessions {
         for native in &native_sessions {
             sessions.retain(|session| {
                 !(session.provider == "codex"

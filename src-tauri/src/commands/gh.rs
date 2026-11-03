@@ -369,25 +369,32 @@ pub async fn list_missing_repos(
         return Err("gh CLI not found. Install with: brew install gh && gh auth login".into());
     }
     let root = expand(&repos_path);
-    let cloned = scan_git_repos(&root, scan_nested).await?;
-
-    // Snapshot existing target names once. Checking `root/name.exists()` for
-    // every remote repo turns a 1,000-repo org into 1,000 blocking stat calls.
-    let mut local_names = std::collections::HashSet::new();
-    if let Ok(mut entries) = fs::read_dir(&root).await {
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            if let Some(name) = entry.file_name().to_str() {
-                local_names.insert(name.to_string());
-            }
-        }
-    }
-
     let orgs: Vec<String> = orgs
         .into_iter()
         .map(|org| org.trim().to_string())
         .filter(|org| !org.is_empty())
         .collect();
-    let listings = join_all(orgs.iter().map(|org| list_org_repos(org))).await;
+
+    // The local scan and the remote org listings are independent; overlap the
+    // filesystem walk with the (much slower) GitHub API pagination.
+    let local = async {
+        let cloned = scan_git_repos(&root, scan_nested).await?;
+
+        // Snapshot existing target names once. Checking `root/name.exists()` for
+        // every remote repo turns a 1,000-repo org into 1,000 blocking stat calls.
+        let mut local_names = std::collections::HashSet::new();
+        if let Ok(mut entries) = fs::read_dir(&root).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                if let Some(name) = entry.file_name().to_str() {
+                    local_names.insert(name.to_string());
+                }
+            }
+        }
+        Ok::<_, String>((cloned, local_names))
+    };
+    let (local, listings) =
+        tokio::join!(local, join_all(orgs.iter().map(|org| list_org_repos(org))));
+    let (cloned, local_names) = local?;
     let mut slugs: Vec<String> = Vec::new();
     for (org, listing) in orgs.iter().zip(listings) {
         let names = listing.map_err(|e| format!("listing org {org}: {e}"))?;

@@ -78,16 +78,22 @@ export async function buildExport(): Promise<SettingsExport> {
     getGroupNestedRepos(),
     getTheme(),
   ]);
+  const [portableReposPath, portableOverrides, portablePins, portableServices] = await Promise.all([
+    api.homeRelative(reposPath),
+    homeRelativeKeys(branchOverrides),
+    Promise.all(pinnedRepos.map(homeRelativeIfPath)),
+    Promise.all(serviceRepos.map(homeRelativeIfPath)),
+  ]);
   return {
     version: SETTINGS_VERSION,
     settings: {
-      reposPath: await api.homeRelative(reposPath),
+      reposPath: portableReposPath,
       defaultBranch,
-      branchOverrides: await homeRelativeKeys(branchOverrides),
+      branchOverrides: portableOverrides,
       repoOrgs,
-      pinnedRepos: await Promise.all(pinnedRepos.map(homeRelativeIfPath)),
+      pinnedRepos: portablePins,
       serviceUrlTemplate,
-      serviceRepos: await Promise.all(serviceRepos.map(homeRelativeIfPath)),
+      serviceRepos: portableServices,
       terminalApp,
       checkForUpdates,
       scanNestedRepos,
@@ -271,9 +277,9 @@ async function homeRelativeIfPath(s: string): Promise<string> {
 async function homeRelativeKeys(
   map: Record<string, string>,
 ): Promise<Record<string, string>> {
+  const entries = Object.entries(map);
+  const keys = await Promise.all(entries.map(([k]) => homeRelativeIfPath(k)));
   const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(map)) {
-    out[await homeRelativeIfPath(k)] = v;
-  }
+  entries.forEach(([, v], i) => { out[keys[i]] = v; });
   return out;
 }

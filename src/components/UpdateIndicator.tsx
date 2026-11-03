@@ -61,8 +61,7 @@ export function UpdateIndicator() {
       let enabled: boolean;
       let lastAt: number | null;
       try {
-        enabled = await getCheckForUpdates();
-        lastAt = await getLastCheckedAt();
+        [enabled, lastAt] = await Promise.all([getCheckForUpdates(), getLastCheckedAt()]);
       } catch (error) { console.warn("update settings unavailable", error); return; }
       if (!enabled || cancelled) return;
       if (!shouldRecheck(lastAt, Date.now())) return;
