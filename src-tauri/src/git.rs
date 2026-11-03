@@ -127,15 +127,15 @@ pub async fn repo_summary(path: PathBuf) -> RepoSummary {
         error: None,
         origin_slug: None,
     };
-    summary.origin_slug = origin_slug(&path).await;
-
-    let (status, last_commit) = tokio::join!(
+    let (origin, status, last_commit) = tokio::join!(
+        origin_slug(&path),
         git(&path, &["status", "--porcelain=v2", "--branch"]),
         git(
             &path,
             &["log", "-1", "--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%ct",],
         ),
     );
+    summary.origin_slug = origin;
 
     let status = match status {
         Ok(s) => s,

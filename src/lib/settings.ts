@@ -263,10 +263,10 @@ async function expandStoredPath(s: string): Promise<string> {
 async function expandStoredPathKeys(
   map: Record<string, string>,
 ): Promise<Record<string, string>> {
+  const entries = Object.entries(map);
+  const keys = await Promise.all(entries.map(([k]) => expandStoredPath(k)));
   const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(map)) {
-    out[await expandStoredPath(k)] = v;
-  }
+  entries.forEach(([, v], i) => { out[keys[i]] = v; });
   return out;
 }
 
